@@ -1,4 +1,4 @@
-# Using Gratis
+# Using Gravis
 
 ## Assistants and groups
 
@@ -26,11 +26,11 @@ Composio sign-in and per-service authorization are optional. You can disconnect 
 
 ## Computer and takeover
 
-With your own cloud backend configured, the Computer pane shows the bot's browser. Drag the divider to resize it, or expand it. Take control to use its mouse and keyboard; Give control back resumes unfinished work from a fresh view of the page. Save important files before stopping the computer. This computer is separate from the Mac running Gratis.
+With your own cloud backend configured, the Computer pane shows the bot's browser. Drag the divider to resize it, or expand it. Take control to use its mouse and keyboard; Give control back resumes unfinished work from a fresh view of the page. Save important files before stopping the computer. This computer is separate from the Mac running Gravis.
 
 ## T3 project tasks
 
-Connect an existing T3 MCP environment by address in Tasks. Gratis does not replace or install a system T3 service in this edition. Authorize access in T3, choose a project and model, and start a bounded task. Follow-up messages reuse the saved thread. The execution host must remain available; project credentials and permissions belong to that environment. T3 does not automatically inherit Composio connections from Gratis.
+Connect an existing T3 MCP environment by address in Tasks. Gravis does not replace or install a system T3 service in this edition. Authorize access in T3, choose a project and model, and start a bounded task. Follow-up messages reuse the saved thread. The execution host must remain available; project credentials and permissions belong to that environment. T3 does not automatically inherit Composio connections from Gravis.
 
 ## What to verify
 
@@ -40,6 +40,6 @@ Check sources, files and final outcomes. A tool error is not a completed action.
 
 In Scheduled tasks, choose **Custom cron** for a five-field expression: minute, hour, day of month, month and weekday. `0 9 1 * *` runs at 9 AM on the first day of each month; `0 9 * * 1-5` runs on weekdays. Set the IANA timezone explicitly. The saved card shows the next actual run. Invalid expressions cannot replace a saved schedule.
 
-Cron schedules use the same pause, resume, run-now and missed-run coalescing as other scheduled tasks. They run only while Gratis is running and the computer is awake. Repeated clock times during the autumn daylight-saving change are not replayed. A cron time that falls in the spring clock gap runs at the next valid instant; weekly schedules retain their existing skip-the-gap behavior.
+Cron schedules use the same pause, resume, run-now and missed-run coalescing as other scheduled tasks. They run only while Gravis is running and the computer is awake. Repeated clock times during the autumn daylight-saving change are not replayed. A cron time that falls in the spring clock gap runs at the next valid instant; weekly schedules retain their existing skip-the-gap behavior.
 
 In **Files**, filter by filename or folder path, and sort by recent changes, name or size. Filtering stays inside the selected bot's files and resets when switching to another bot. Files stay where they are; filtering and sorting do not move or rename them.

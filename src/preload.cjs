@@ -23,6 +23,7 @@ api.watchComputer = value=>invoke('orbit:computer-watch',value);
 api.computerControl = value=>invoke('orbit:computer-control',value);
 api.codexStatus = () => invoke('orbit:codex-status');
 api.codexModels = () => invoke('orbit:codex-models');
+api.hostedModels = (provider, apiKey) => invoke('orbit:hosted-models', {provider, apiKey});
 api.claudeStatus = () => invoke('orbit:claude-status');
 api.microphonePermission = () => invoke('orbit:microphone-permission');
 api.transcribeAudio = value => invoke('orbit:transcribe-audio', value);

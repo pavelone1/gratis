@@ -2,14 +2,22 @@ import {mkdir,readFile,writeFile,rename} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {Composio} from '@composio/core';
+import {HOSTED,HOSTED_KEY_PATTERN} from './hosted-providers.mjs';
+
+// API-key providers (xAI, OpenAI, Claude API). Keys are stored only in the encrypted file below.
+const hostedKeyFields=Object.fromEntries(Object.values(HOSTED).map(spec=>[spec.keyName,spec]));
+const validKey=value=>typeof value==='string'&&HOSTED_KEY_PATTERN.test(value.trim());
 
 // Credentials never enter workspace snapshots or the renderer.
 export class Connections {
   constructor({directory,encrypt,decrypt,createClient=credential=>new Composio(typeof credential==='string'?{apiKey:credential}:credential)}){this.directory=directory;this.encrypt=encrypt;this.decrypt=decrypt;this.createClient=createClient;this.value={userId:randomUUID()};this.sessionPromise=null;}
   async init(){await mkdir(this.directory,{recursive:true,mode:0o700});try{this.value=JSON.parse(await this.decrypt(await readFile(join(this.directory,'connections.secure'))));}catch(error){if(error.code!=='ENOENT')throw new Error('Could not unlock saved connections.');}return this;}
   async save(){const temporary=join(this.directory,`.connections-${randomUUID()}`);await writeFile(temporary,await this.encrypt(JSON.stringify(this.value)),{mode:0o600});await rename(temporary,join(this.directory,'connections.secure'));}
-  status(){return {composio:!!(this.value.composioKey||this.value.composioAccount),cloud:!!this.value.cloud?.token,cloudEndpoint:this.value.cloud?.endpoint||''};}
-  async configure({composioKey,cloudEndpoint,cloudToken}={}){
+  status(){return {composio:!!(this.value.composioKey||this.value.composioAccount),cloud:!!this.value.cloud?.token,cloudEndpoint:this.value.cloud?.endpoint||'',hosted:Object.fromEntries(Object.values(HOSTED).map(spec=>[spec.id,!!this.value[spec.keyName]]))};}
+  // Main process only: never expose through IPC. Throws a user-facing message when no key is saved.
+  hostedKey(provider){const spec=HOSTED[provider];if(!spec)throw new Error('Choose an API-key provider.');const key=this.value[spec.keyName];if(!key)throw new Error(`Add your ${spec.label} API key in Settings.`);return key;}
+  async configure({composioKey,cloudEndpoint,cloudToken,...hostedKeys}={}){
+    for(const [field,spec] of Object.entries(hostedKeyFields)){const key=hostedKeys[field];if(key===undefined)continue;if(typeof key!=='string'||(key.trim()&&!validKey(key)))throw new Error(`Invalid ${spec.label} API key.`);if(key.trim())this.value[spec.keyName]=key.trim();else delete this.value[spec.keyName];}
     if(composioKey!==undefined){if(typeof composioKey!=='string'||composioKey.length>2000)throw new Error('Invalid Composio key.');this.value.composioKey=composioKey.trim();delete this.value.composioAccount;delete this.value.sessionId;this.sessionPromise=null;}
     if(cloudEndpoint!==undefined||cloudToken!==undefined){const endpoint=cloudEndpoint||this.value.cloud?.endpoint;const token=cloudToken||this.value.cloud?.token;const url=new URL(endpoint);if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)throw new Error('The cloud computer needs a secure HTTPS endpoint.');if(typeof token!=='string'||token.length<16||token.length>4096)throw new Error('Invalid cloud computer credential.');this.value.cloud={endpoint:url.origin,token};}
     await this.save();return this.status();

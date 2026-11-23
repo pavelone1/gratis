@@ -42,7 +42,7 @@ jobs:
       - run: npm run package:mac
       - name: Verify packaged identity and desktop regressions
         run: |
-          export GRATIS_TEST_APP="$PWD/release/Gratis Core-darwin-$(node -p process.arch)/Gratis Core.app/Contents/MacOS/Gratis Core"
+          export GRATIS_TEST_APP="$PWD/release/Gravis-darwin-$(node -p process.arch)/Gravis.app/Contents/MacOS/Gravis"
           node test/package-edition.mjs
           npm run test:ui
           node test/desktop-features.mjs

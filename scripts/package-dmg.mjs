@@ -8,7 +8,7 @@ const edition=JSON.parse(await readFile('edition.json')),pkg=JSON.parse(await re
 const app=resolve('release',`${edition.name}-darwin-${process.arch}`,`${edition.name}.app`);
 verifyMacApp(app,{bundleId:edition.bundleId,version:pkg.version});
 const stage=await mkdtemp(join(tmpdir(),'gratis-core-dmg-'));
-const output=resolve('dist',`Gratis-Core-${pkg.version}-mac-${process.arch}.dmg`);
+const output=resolve('dist',`Gravis-${pkg.version}-mac-${process.arch}.dmg`);
 try{
  await mkdir('dist',{recursive:true});
  execFileSync('/usr/bin/ditto',[app,join(stage,`${edition.name}.app`)]);

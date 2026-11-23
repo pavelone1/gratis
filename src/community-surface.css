@@ -13,4 +13,4 @@ body{background:var(--bg)}button,input,textarea,select{font-family:inherit}butto
 #stop.composer-circle{display:grid;place-items:center;flex:none;width:34px;height:34px;min-width:34px;padding:0;border:0;border-radius:10px;background:var(--accent);color:var(--bg);line-height:1}
 #stop svg{display:block;width:19px;height:19px}
 .messages{scroll-behavior:auto}
-:root[data-theme=dark] .provider-logo[src$="/openai.svg"]{filter:invert(1)}
+:root[data-theme=dark] .provider-logo[src$="/openai.svg"],:root[data-theme=dark] .provider-logo[src$="/xai.svg"]{filter:invert(1)}

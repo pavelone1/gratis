@@ -1,6 +1,6 @@
 {
   "id": "core",
-  "name": "Gratis Core",
-  "dataFolder": "Gratis Core",
-  "bundleId": "com.promptadvisers.gratis.core"
+  "name": "Gravis",
+  "dataFolder": "Gravis",
+  "bundleId": "io.github.pavelone1.gravis"
 }

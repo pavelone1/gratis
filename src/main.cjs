@@ -47,6 +47,7 @@ function broadcast(snapshot) {
 app.whenReady().then(async () => {
   const safety=await import('./storage-safety.mjs');releaseDataLock=await safety.acquireDataLock(dataDir);await safety.prepareStorage(dataDir);
   const { ChatService } = await import('./chat-service.mjs');
+  const { streamReply } = await import('./backend.mjs');
   const [{Connections},{WorkspaceFiles},{CloudComputer},{agentRuntime},{ComposioSignIn}] = await Promise.all([import('./connections.mjs'),import('./workspace-files.mjs'),import('./cloud-computer.mjs'),import('./agent-tools.mjs'),import('./composio-signin.mjs')]);
   const {createSecureStorageAccess}=await import('./secure-storage.mjs');secureStorageAccess=createSecureStorageAccess(safeStorage);
   connections=await new Connections({directory:dataDir,encrypt:secureStorageAccess.encrypt,decrypt:secureStorageAccess.decrypt}).init();
@@ -74,8 +75,11 @@ app.whenReady().then(async () => {
   cloud=new CloudComputer(connections,{onFrame:frame=>{if(window&&!window.isDestroyed())window.webContents.send('orbit:computer-frame',frame);},onState:state=>{if(window&&!window.isDestroyed())window.webContents.send('orbit:computer-state',controlState(state));}});
   const {MemoryService}=await import('./memory-service.mjs'),{MemoryEmbeddings}=await import('./memory-embeddings.mjs');
   const embeddings=new MemoryEmbeddings({modelPath:(app.isPackaged?path.join(process.resourcesPath,'models','sentence-encoder'):path.join(__dirname,'../assets/models/sentence-encoder'))+path.sep});
-  memory=await new MemoryService({directory:dataDir,...secureStorageAccess.keyring,embeddings,onChange:value=>{if(window&&!window.isDestroyed())window.webContents.send('orbit:memory-changed',value);}}).init();
-  service = new ChatService({ dataDir, memory, workspaceFiles:files, onChange: broadcast,
+  const {extractMemory}=await import('./memory-extract.mjs');
+  // Memory extraction reuses the chosen provider, so API-key providers need the key store too.
+  memory=await new MemoryService({directory:dataDir,...secureStorageAccess.keyring,embeddings,extractor:args=>extractMemory({...args,backend:request=>streamReply({...request,secrets:connections})}),onChange:value=>{if(window&&!window.isDestroyed())window.webContents.send('orbit:memory-changed',value);}}).init();
+  // API-key providers read their key from the encrypted Connections store here, in the main process.
+  service = new ChatService({ dataDir, memory, workspaceFiles:files, onChange: broadcast, backend:args=>streamReply({...args,secrets:connections}),
     onGroupMembersChanging:async({retired,retained})=>{
       for(const seat of [...retired,...retained])computerControlEpochs.set(seat.conversationId,(computerControlEpochs.get(seat.conversationId)||0)+1);
       const results=await Promise.allSettled([
@@ -95,7 +99,7 @@ app.whenReady().then(async () => {
   if (app.isPackaged && !dataOverride) {
     const primary = service.snapshot().bots[0];
     if (primary?.name === 'Personal assistant' && primary.instructions === 'Be helpful, clear, and concise.')
-      await service.updateBot({ id: primary.id, name: 'Gratis' });
+      await service.updateBot({ id: primary.id, name: 'Gravis' });
   }
   if(secureStorageAccess.locked)throw new Error('Secure storage is locked.');
   window = new BrowserWindow({ width: 1496, height: 938, minWidth: 512, minHeight: 520, show: false,
@@ -168,6 +172,8 @@ app.whenReady().then(async () => {
   for(const [name,operation]of Object.entries({status:()=>messaging?messaging.status():{connected:false,state:messagingStartupError},manifest:()=>SLACK_MANIFEST,configure:value=>messaging.configure(value),link:()=>messaging.linkCode(),channels:()=>messaging.channels(),disconnect:()=>messaging.disconnect(),review:()=>messaging.reviewDeliveries()}))ipcMain.handle('orbit:slack-'+name,(e,value)=>{authorized(e);if(!messaging&&name!=='status'&&name!=='manifest')throw Error(messagingStartupError);return operation(value);});
   ipcMain.handle('orbit:connections', async e => {authorized(e);return connections.status();});
   ipcMain.handle('orbit:configure-connections', async (e,value) => {authorized(e);return connections.configure(value);});
+  // A key typed in Settings can be tested without being saved; otherwise the saved key is used.
+  ipcMain.handle('orbit:hosted-models', async (e,value) => {authorized(e);const {listHostedModels}=await import('./hosted-backend.mjs');const provider=value?.provider,typed=typeof value?.apiKey==='string'?value.apiKey.trim():'';return listHostedModels({provider,apiKey:typed||connections.hostedKey(provider)});});
   ipcMain.handle('orbit:connection-catalog', async (e,search) => {authorized(e);return connections.catalog(search);});
   ipcMain.handle('orbit:connect-app', async (e,slug) => {authorized(e);const url=await connections.connect(slug);await shell.openExternal(url);return true;});
   const t3Scope=value=>{const c=service._conversation(value?.conversationId);service._threadOpen(c);return c;};
@@ -287,8 +293,8 @@ app.whenReady().then(async () => {
   if (process.env.GRATIS_TEST_HIDDEN !== '1') window.show();
 }).catch(async error => {
   await releaseDataLock?.();console.error(error);
-  if(secureStorageAccess?.locked){const {response}=await dialog.showMessageBox({type:'warning',title:'Gratis is locked',message:'Secure storage could not be opened.',detail:'Your chats, settings and encrypted credentials have not been reset. Unlock your operating-system keychain, then choose Try again. Gratis will not keep asking in the background.',buttons:['Quit','Try again'],defaultId:0,cancelId:0});if(response===1)app.relaunch();}
-  else dialog.showErrorBox('Gratis could not start', error.message);
+  if(secureStorageAccess?.locked){const {response}=await dialog.showMessageBox({type:'warning',title:'Gravis is locked',message:'Secure storage could not be opened.',detail:'Your chats, settings and encrypted credentials have not been reset. Unlock your operating-system keychain, then choose Try again. Gravis will not keep asking in the background.',buttons:['Quit','Try again'],defaultId:0,cancelId:0});if(response===1)app.relaunch();}
+  else dialog.showErrorBox('Gravis could not start', error.message);
   app.exit(1);
 });
 app.on('window-all-closed', () => app.quit());

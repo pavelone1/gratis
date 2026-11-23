@@ -1,3 +1,4 @@
+import {effectiveSettings} from './provider-select.mjs';
 import {randomUUID} from 'node:crypto';
 import {groupRecipients} from './group-routing.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -121,7 +122,7 @@ export class TeamCoordinator {
   if(this.active.has(child.id)||s.tasks.has(child.id))return{status:'busy',message:`${peer.name} is already working in this thread. Continue with available findings or ask another participant.`,context:(root.teamExchanges||[]).filter(e=>e.toBotId===peer.id).slice(-2).map(e=>({status:e.status,response:e.response?.slice(0,6000)}))};
   const requester=from.id===root.botId?root:s.state.conversations.find(c=>c.parentThreadId===root.id&&c.botId===from.id),parent=s.tasks.get(requester.id),exchange={id:randomUUID(),fromBotId:from.id,fromName:from.name,toBotId:peer.id,toName:peer.name,request:message,childConversationId:child.id,status:'working',chain:[...chain,peer.id],createdAt:Date.now(),...(origin?{origin}:{}),parentReplyId:parentReplyId||parent?.assistantId,requesterConversationId:requester.id,requestUserId:requester.messages.findLast(m=>m.role==='user')?.id};
   (root.teamExchanges??=[]).push(exchange);
-  if(origin==='group-message')root.messages.push({id:randomUUID(),role:'assistant',kind:'team-reply',botId:peer.id,content:'',status:'streaming',createdAt:Date.now(),provider:s.state.settings.provider,sourceExchangeId:exchange.id,sourceConversationId:child.id});
+  if(origin==='group-message')root.messages.push({id:randomUUID(),role:'assistant',kind:'team-reply',botId:peer.id,content:'',status:'streaming',createdAt:Date.now(),provider:effectiveSettings(s.state.settings,peer).provider,sourceExchangeId:exchange.id,sourceConversationId:child.id});
   this.active.set(child.id,exchange);this.chains.set(child.id,[...chain,peer.id]);await s._changed();
   let detachedForTakeover=false;
   const abort=()=>{if(root.computerPause){detachedForTakeover=true;return;}void s.stop({conversationId:child.id}).catch(()=>{});};signal.addEventListener('abort',abort,{once:true});

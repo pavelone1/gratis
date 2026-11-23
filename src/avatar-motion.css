@@ -2,4 +2,4 @@
 .avatar-motion img{display:block;width:100%;height:100%;object-fit:contain;border-radius:inherit}
 .avatar-motion.is-selected{box-shadow:0 0 0 2px var(--accent,#247c75)}
 .avatar-photo img{object-fit:cover}
-@media(prefers-reduced-motion:no-preference){button:hover .avatar-motion{transform:translateY(-2px)}.avatar-motion[data-mode=streaming]{animation:gratis-working 1.5s ease-in-out infinite}@keyframes gratis-working{50%{transform:scale(.91);opacity:.65}}}
+@media(prefers-reduced-motion:no-preference){button:hover .avatar-motion{transform:translateY(-2px)}.avatar-motion[data-mode=streaming]:not([data-critter="1"]){animation:gratis-working 1.5s ease-in-out infinite}@keyframes gratis-working{50%{transform:scale(.91);opacity:.65}}}

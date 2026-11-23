@@ -1,0 +1,21 @@
+/* Animated provider marks.
+   The marks are <img> elements, so motion is applied to the element itself. Everything that
+   moves is inside prefers-reduced-motion: no-preference. Message nodes are rebuilt while a
+   reply streams, so the byline mark takes a time-based negative animation-delay (set in the
+   renderer) to stay in phase instead of restarting on every chunk. */
+.byline-logo{width:14px;height:14px;margin-right:6px;vertical-align:-2px}
+.bot-working{display:flex;align-items:center}
+.bot-working .byline-logo{width:16px;height:16px;margin:0 0 0 10px}
+@media(prefers-reduced-motion:no-preference){
+  .select-option .provider-logo,.select-value .provider-logo{transition:transform 260ms cubic-bezier(.2,.8,.2,1)}
+  .select-option:hover .provider-logo{transform:rotate(20deg) scale(1.14)}
+  .select-value .provider-logo{animation:provider-breathe 4.8s ease-in-out infinite}
+  html[data-responding="1"] .select-value .provider-logo{animation:provider-working 1.1s ease-in-out infinite}
+  .byline-logo[data-state="streaming"]{animation:provider-working 1.1s ease-in-out infinite}
+  .byline-logo[data-state="error"]{animation:provider-error 480ms ease-in-out 1;filter:grayscale(1) opacity(.6)}
+  @keyframes provider-breathe{50%{transform:scale(1.08);opacity:.8}}
+  @keyframes provider-working{0%,100%{transform:rotate(0) scale(1);opacity:1}50%{transform:rotate(180deg) scale(.86);opacity:.65}}
+  @keyframes provider-error{20%,60%{transform:translateX(-2px)}40%,80%{transform:translateX(2px)}}
+}
+
+.settings-error{color:#b3261e;margin:0 24px 8px;font-weight:600}:root[data-theme=dark] .settings-error{color:#ff9d92}

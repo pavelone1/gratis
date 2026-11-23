@@ -11,7 +11,7 @@ test('bot files are isolated, persisted, bounded, and reject traversal and symli
  const dir=await mkdtemp(join(tmpdir(),'gratis-files-'));t.after(()=>rm(dir,{recursive:true,force:true}));const files=new WorkspaceFiles(dir),a=randomUUID(),b=randomUUID();
  await files.write(a,'notes/work.md','Saved note');assert.equal(await files.read(a,'notes/work.md'),'Saved note');assert.equal((await files.list(b)).length,0);
  for(const path of ['../other','/etc/passwd','.secret/key','ok/../../out'])await assert.rejects(files.write(a,path,'bad'));
- await symlink(tmpdir(),join(files.root(a),'escape'));await assert.rejects(files.write(a,'escape/out','bad'),/symlink/);
+ await symlink(tmpdir(),join(files.root(a),'escape'),process.platform==='win32'?'junction':'dir');await assert.rejects(files.write(a,'escape/out','bad'),/symlink/);
  await assert.rejects(files.write(a,'big.txt','x'.repeat(200001)),/200 KB/);
 });
 test('connection snapshots never include secrets and encrypted settings survive restart',async t=>{

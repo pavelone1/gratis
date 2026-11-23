@@ -1,10 +1,10 @@
-import {BOT_SHAPES,BOT_COLORS,avatarColor} from './avatar.mjs';
+import {BOT_SHAPES,BOT_COLORS,CRITTER_IDS,avatarColor} from './avatar.mjs';
 import {animatedAvatar,pulseAvatar} from './avatar-motion.mjs';
 export function setupCreateBot({api,onCreated}) {
  const $=id=>document.getElementById(id),dialog=$('create-bot-dialog');
- let shape='flower',color='orange',pending=false;
+ let shape='bear',color='orange',pending=false;
  const shapeButtons=new Map(),colorButtons=new Map();
- $('create-shapes').replaceChildren(...[BOT_SHAPES.slice(0,5),BOT_SHAPES.slice(5,10),BOT_SHAPES.slice(10)].map(row=>{
+ $('create-shapes').replaceChildren(...Array.from({length:Math.ceil(BOT_SHAPES.length/5)},(_,i)=>BOT_SHAPES.slice(i*5,i*5+5)).map(row=>{
   const group=document.createElement('div');group.className='create-shape-row';
   for(const option of row){const button=document.createElement('button');button.type='button';button.className='create-shape';button.setAttribute('aria-label',`${option.id} character shape`);button.onclick=()=>{shape=option.id;paint();pulseAvatar('create-preview');pulseAvatar(`shape-${shape}`);};shapeButtons.set(option.id,button);group.append(button);}return group;
  }));
@@ -17,7 +17,7 @@ export function setupCreateBot({api,onCreated}) {
   for(const option of BOT_COLORS){const button=colorButtons.get(option.id);button.disabled=pending;button.setAttribute('aria-pressed',String(option.id===color));button.firstChild.style.backgroundColor=option[theme];}
   $('create-bot-submit').disabled=pending||!$('new-bot-name').value.trim();$('create-bot-submit').textContent=pending?'Creating…':'Create';$('new-bot-name').disabled=pending;$('cancel-create-bot').disabled=pending;dialog.querySelector('.create-close').disabled=pending;
  }
- function open(){const random=crypto.getRandomValues(new Uint32Array(2));shape=BOT_SHAPES[random[0]%BOT_SHAPES.length].id;color=BOT_COLORS[random[1]%BOT_COLORS.length].id;pending=false;$('new-bot-name').value='';$('create-error').hidden=true;paint();dialog.showModal();$('new-bot-name').focus();}
+ function open(){const random=crypto.getRandomValues(new Uint32Array(2));shape=CRITTER_IDS[random[0]%CRITTER_IDS.length];color=BOT_COLORS[random[1]%BOT_COLORS.length].id;pending=false;$('new-bot-name').value='';$('create-error').hidden=true;paint();dialog.showModal();$('new-bot-name').focus();}
  $('new-bot-name').oninput=()=>{$('create-bot-submit').disabled=pending||!$('new-bot-name').value.trim();};
  $('cancel-create-bot').onclick=()=>{if(!pending)dialog.close();};
  dialog.addEventListener('cancel',event=>{if(pending)event.preventDefault();});

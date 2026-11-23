@@ -6,7 +6,7 @@ Before installing, read the [installation and use notice](../DISCLAIMER.md). Rev
 
 For an app installer, use [Gratis Core 0.4.2 downloads](https://github.com/promptadvisers/gratis/releases/tag/v0.4.2) and drag Gratis Core to Applications. For source development, use a Mac with Apple Silicon or Intel, Node.js 22+ and npm. Clone the repository and run the four commands in the main README. `npm run setup:assets` downloads a fixed revision of the semantic memory encoder and a fixed Composio CLI release, verifies checksums, and installs them only inside this checkout. It does not copy your account configuration or sign you in.
 
-`npm start` opens **Gratis Core**. This edition uses its own local app data folder, separate from other editions. A fresh checkout starts with an empty demo conversation.
+`npm start` opens **Gravis Core**. This edition uses its own local app data folder, separate from other editions. A fresh checkout starts with an empty demo conversation.
 
 ## 2. Choose a provider
 
@@ -29,7 +29,7 @@ Create a group with two or more bots. The first bot coordinates the work. Most m
 
 ## 5. Add recurring work
 
-Open **+ → Scheduled tasks**, or ask: “Every weekday at 9 AM America/Toronto, summarize the open questions in this conversation.” Check the saved task, timezone and next run. Keep the Mac awake and Gratis running. You can pause, edit, delete or run the task now.
+Open **+ → Scheduled tasks**, or ask: “Every weekday at 9 AM America/Toronto, summarize the open questions in this conversation.” Check the saved task, timezone and next run. Keep the Mac awake and Gravis running. You can pause, edit, delete or run the task now.
 
 ![A scheduled task using synthetic instructions](screenshots/core-schedules.png)
 
@@ -48,7 +48,7 @@ python -c "import whisper; whisper.load_model('base.en')"
 npm start
 ```
 
-Launch from this activated environment so Gratis can find `whisper` in `PATH`. English mode needs `base.en`; automatic-language mode needs `base`. Model downloads require disk space and network access. The app requests microphone access when you record.
+Launch from this activated environment so Gravis can find `whisper` in `PATH`. English mode needs `base.en`; automatic-language mode needs `base`. Model downloads require disk space and network access. The app requests microphone access when you record.
 
 ## Optional connections
 

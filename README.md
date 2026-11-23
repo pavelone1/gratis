@@ -1,13 +1,15 @@
-# Gratis
+# Gravis
+
+> **Gravis is a fork of [Gratis](https://github.com/promptadvisers/gratis)** (MIT licensed; the original copyright notice is kept in [LICENSE](LICENSE)). It adds per-bot AI selection so a supervisor and its sub-agents can each run on a different AI, API-key providers (xAI, OpenAI, Claude), and animated provider marks. The download links below are for the **upstream Gratis Core** installers, not Gravis builds. Gravis is not affiliated with the Gratis authors.
 
 > **Before installing:** Do your own due diligence. This is experimental software, provided without warranty or a maintenance commitment. Review the source, permissions, third-party services and [installation/use notice](DISCLAIMER.md); back up your data and test with a disposable workspace first.
 
 
 **A desktop home for your AI assistants. Your bots, your context, your connections.**
 
-Gratis brings focused assistants, group conversations, local memory and recurring work into one desktop workspace. Connect an eligible Claude or Codex account, choose which tools a bot can use, and keep its work in one place.
+Gravis brings focused assistants, group conversations, local memory and recurring work into one desktop workspace. Connect an eligible Claude or Codex account, choose which tools a bot can use, and keep its work in one place.
 
-![Gratis Core with a synthetic research conversation](docs/screenshots/core-overview.png)
+![Gravis Core with a synthetic research conversation](docs/screenshots/core-overview.png)
 
 ## Reliability and recovery
 
@@ -20,6 +22,8 @@ Configure run limits, preserve partial work, and create verified local checkpoin
 - **Keep useful context.** Inspect and manage memories scoped to you, a bot or a conversation.
 - **Schedule recurring checks.** Create daily, weekday, weekly or interval tasks. Results return to the same chat.
 - **Chat from Slack.** Link your own Slack account to an existing assistant, with explicit channel permissions. Follow the [Slack setup guide](docs/SLACK.md).
+- **A different AI per bot.** Run a supervisor and its sub-agents on Claude, ChatGPT (Codex) or API-key providers. See [A different AI for each bot](docs/PER_BOT_AI.md).
+- **Bring your own API key.** Use xAI Grok, OpenAI or Claude through an API key as well as the account sign-ins. See [API-key providers](docs/API_KEY_PROVIDERS.md).
 - **Connect your apps.** Optional Composio integration lets you authorize services individually.
 - **Use a separate computer.** An optional self-hosted cloud browser supports live viewing, manual takeover and resuming after your changes.
 - **Delegate project work.** Connect your own T3 environment for work that continues independently of the desktop window.
@@ -33,7 +37,7 @@ Download [Gratis Core 0.4.2](https://github.com/promptadvisers/gratis/releases/t
 | Apple Silicon | `Gratis-Core-0.4.2-mac-arm64.dmg` |
 | Intel | `Gratis-Core-0.4.2-mac-x64.dmg` |
 
-Open the DMG, then drag **Gratis Core** into **Applications**. Close the app before replacing an older copy. The installer does not reset its data folder. GitHub’s **Source code** ZIP is not an app installer.
+Open the DMG, then drag **Gravis Core** into **Applications**. Close the app before replacing an older copy. The installer does not reset its data folder. GitHub’s **Source code** ZIP is not an app installer.
 
 These previews are ad-hoc signed, not notarized. Do not disable system security protections globally. See [installation details and checksums](docs/DOWNLOADS.md).
 
@@ -59,6 +63,8 @@ For the details that matter before installing, start with the [five-minute guide
 | --- | --- |
 | Install and try a first bot | [Quickstart](docs/QUICKSTART.md) |
 | Learn chats, memory, schedules and connections | [User guide](docs/USER_GUIDE.md) |
+| Use a different AI for each bot | [Per-bot AI](docs/PER_BOT_AI.md) |
+| Use xAI, OpenAI or Claude with an API key | [API-key providers](docs/API_KEY_PROVIDERS.md) |
 | Understand what stays local and what is sent out | [Privacy](PRIVACY.md) |
 | Build, test or change the app | [Development](docs/DEVELOPMENT.md) |
 | Understand the runtime and trust boundaries | [Architecture](docs/ARCHITECTURE.md) |
@@ -67,7 +73,7 @@ For the details that matter before installing, start with the [five-minute guide
 
 ## Practical limits
 
-Scheduled tasks require Gratis running and the Mac awake. Closing the window keeps enabled schedules active; explicitly quitting stops execution until reopen. A missed period becomes one fresh check, not a backlog. External changes can wait for approval.
+Scheduled tasks require Gravis running and the Mac awake. Closing the window keeps enabled schedules active; explicitly quitting stops execution until reopen. A missed period becomes one fresh check, not a backlog. External changes can wait for approval.
 
 Cloud browsing is optional, runs in your own infrastructure, and may incur hosting costs. T3 tasks use the permissions and machine availability of your own T3 environment. Neither service is preconnected.
 

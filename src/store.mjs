@@ -1,20 +1,23 @@
+import { isHostedProvider } from './hosted-providers.mjs';
 import { mkdir, readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {assertStorageCompatible, createCheckpoint} from './storage-safety.mjs';
 import {validateRunLimits} from './run-limits.mjs';
+import {validateMemoryChoice} from './provider-select.mjs';
 
-export const DEFAULT_SETTINGS = Object.freeze({ provider: 'demo', baseUrl: 'http://127.0.0.1:11434/v1', model: '', effort: 'medium', voiceCleanup: true, voiceLanguage: 'en', displayName: '', profileAvatarDataUrl: null });
+export const DEFAULT_SETTINGS = Object.freeze({ provider: 'demo', baseUrl: 'http://127.0.0.1:11434/v1', model: '', effort: 'medium', voiceCleanup: true, voiceLanguage: 'en', displayName: '', profileAvatarDataUrl: null, memoryProvider: '', memoryModel: '' });
 export function initialState() {
   const now = Date.now(), botId = randomUUID(), conversationId = randomUUID();
   return { version: 1, bots: [{ id: botId, name: 'Gratis', instructions: 'Be helpful, clear, and concise.', userPromptTemplate: '{{message}}', promptMode: 'auto', promptGenerated: false, color: '#496e57', avatarDataUrl: null, createdAt: now }], conversations: [{ id: conversationId, botId, title: 'New conversation', draft: '', messages: [], createdAt: now, updatedAt: now }], activeBotId: botId, activeConversationId: conversationId, settings: { ...DEFAULT_SETTINGS } };
 }
 export function validState(s) {
   try{if(s?.settings?.runLimits!==undefined)validateRunLimits(s.settings.runLimits);}catch{return false;}
-  if (!s || s.version !== 1 || !Array.isArray(s.bots) || !Array.isArray(s.conversations) || !s.settings || !['demo', 'local', 'claude', 'codex'].includes(s.settings.provider) || typeof s.settings.baseUrl !== 'string' || typeof s.settings.model !== 'string') return false;
+  if (!s || s.version !== 1 || !Array.isArray(s.bots) || !Array.isArray(s.conversations) || !s.settings || !(['demo', 'local', 'claude', 'codex'].includes(s.settings.provider) || isHostedProvider(s.settings.provider)) || typeof s.settings.baseUrl !== 'string' || typeof s.settings.model !== 'string') return false;
   if (s.settings.profileAvatarDataUrl !== undefined && s.settings.profileAvatarDataUrl !== null && (typeof s.settings.profileAvatarDataUrl !== 'string' || s.settings.profileAvatarDataUrl.length > 2_000_000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(s.settings.profileAvatarDataUrl))) return false;
   if (s.settings.displayName !== undefined && (typeof s.settings.displayName !== 'string' || s.settings.displayName.length > 80)) return false;
   if (s.settings.effort !== undefined && !['minimal','low', 'medium', 'high','xhigh','max','ultra','persistent'].includes(s.settings.effort)) return false;
+  try { validateMemoryChoice(s.settings.memoryProvider, s.settings.memoryModel); } catch { return false; }
   if (s.settings.voiceCleanup !== undefined && typeof s.settings.voiceCleanup !== 'boolean') return false;
   if (s.settings.voiceLanguage !== undefined && !['en', 'auto'].includes(s.settings.voiceLanguage)) return false;
   const bots = new Set(), conversations = new Set();

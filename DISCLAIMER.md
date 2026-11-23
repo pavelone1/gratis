@@ -2,7 +2,7 @@
 
 ## Do your own due diligence before installing
 
-Gratis is experimental software. Review the source, license, dependencies, release notes and requested permissions before running it. Test with a separate account or disposable workspace first, keep backups, and use only permissions and connected accounts you are comfortable granting.
+Gravis is experimental software. Review the source, license, dependencies, release notes and requested permissions before running it. Test with a separate account or disposable workspace first, keep backups, and use only permissions and connected accounts you are comfortable granting.
 
 AI-generated output can be incorrect, incomplete or unsafe. Independently verify information and review proposed actions. Do not rely on this software for medical, legal, financial, safety-critical or other consequential decisions without appropriate independent advice and checks.
 
@@ -14,7 +14,7 @@ The local chat and file workspace may contain sensitive information. Read [Priva
 
 ## Independent project; no affiliation
 
-Gratis is an independent project. It is not affiliated with, sponsored by, endorsed by, or an official product of the creators of GrokBot, xAI, OpenAI, Anthropic, or other referenced products or services. Names and marks belong to their respective owners and are used only for identification or compatibility references. No third-party trademark or proprietary-content rights are granted by this project.
+Gravis is an independent project. It is not affiliated with, sponsored by, endorsed by, or an official product of the creators of GrokBot, xAI, OpenAI, Anthropic, or other referenced products or services. Names and marks belong to their respective owners and are used only for identification or compatibility references. No third-party trademark or proprietary-content rights are granted by this project.
 
 The project's [license](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md) govern the relevant source and dependencies. This notice does not grant permission to copy another product's protected code, artwork or branding, and does not establish that a particular use is legally permitted.
 

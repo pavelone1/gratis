@@ -15,6 +15,8 @@ import { createBotTile } from './bot-tile.mjs';
 import { setupVoiceInput } from './voice-ui.mjs';
 import { setupCreateBot } from './create-bot-ui.mjs';
 import { setupSelects } from './select-ui.mjs';
+import { HOSTED, isHostedProvider } from './hosted-providers.mjs';
+import { effectiveSettings } from './provider-select.mjs';
 const $ = id => document.getElementById(id);
 const api = window.orbit;
 const selects = setupSelects();
@@ -32,6 +34,17 @@ let pendingProfileAvatar = null, profilePhotoSequence = 0, avatarTarget = null;
 let avatarSource = null, avatarImage = null, avatarCrop = null, imageSequence = 0, pointer = null;
 const el = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
 function notice(error) { $('notice').textContent = error?.message || String(error); $('notice').hidden = false; }
+const LOGO_BY_PROVIDER={claude:'claude',codex:'openai'};
+// Small animated provider mark for assistant bylines. Nodes are rebuilt while streaming, so the
+// time-based negative delay keeps the motion in phase instead of restarting on every chunk.
+function providerLogo(m){
+  if(m.role!=='assistant')return null;
+  const name=isHostedProvider(m.provider)?HOSTED[m.provider].logo:LOGO_BY_PROVIDER[m.provider];if(!name)return null;
+  const img=document.createElement('img');img.className='provider-logo byline-logo';img.src=`./assets/${name}.svg`;img.alt='';
+  img.dataset.state=m.status==='streaming'?'streaming':m.status==='error'?'error':'idle';img.style.animationDelay=`-${Date.now()%1100}ms`;return img;
+}
+let hostedKeys={};
+async function refreshHostedKeys(){try{hostedKeys=(await api.connections()).hosted||{};}catch{hostedKeys={};}if(state)render(state);if($('settings-dialog')?.open)syncHostedOptions();}
 async function run(fn) { try { const result = await fn(); if (result?.bots) render(result); return result; } catch (error) { notice(error); return null; } }
 const currentConversation = () => state?.conversations.find(c => c.id === state.activeConversationId);
 const currentBot = () => state?.bots.find(b => b.id === state.activeBotId);
@@ -46,15 +59,16 @@ function makeAvatar(bot,user=false,location='sidebar') {
 function isStreaming() { return currentConversation()?.messages.some(m => m.status === 'streaming'); }
 function renderBotTile(b,surface='tile') {
   const messages=state.conversations.filter(c=>c.botId===b.id).flatMap(c=>c.messages),busy=messages.some(m=>m.status==='streaming');
-  const isClaude=state.settings.provider==='claude',isCodex=state.settings.provider==='codex';
-  const unconfigured=(state.settings.provider==='local'&&!state.settings.model)||(isClaude&&!claudeConnection?.signedIn)||(isCodex&&!codexConnection?.signedIn);
+  const eff=effectiveSettings(state.settings,b),isClaude=eff.provider==='claude',isCodex=eff.provider==='codex',hosted=HOSTED[eff.provider];
+  const unconfigured=(eff.provider==='local'&&!eff.model)||(isClaude&&!claudeConnection?.signedIn)||(isCodex&&!codexConnection?.signedIn)||(hosted&&!hostedKeys[hosted.id]);
   const status=busy?'busy':unconfigured?'unconfigured':'ready';
-  const statusLabel=busy?'Responding':isClaude?(claudeConnection?.signedIn?'Claude ready':'Check Claude sign-in in Settings'):isCodex?(codexConnection?.signedIn?'Codex ready':'Check Codex sign-in in Settings'):unconfigured?'Choose a local model in Settings':state.settings.provider==='demo'?'Local demo ready':'Local AI configured';
+  const statusLabel=busy?'Responding':isClaude?(claudeConnection?.signedIn?'Claude ready':'Check Claude sign-in in Settings'):isCodex?(codexConnection?.signedIn?'Codex ready':'Check Codex sign-in in Settings'):hosted?(hostedKeys[hosted.id]?hosted.label+' ready':'Add your '+hosted.label+' key in Settings'):unconfigured?'Choose a local model in Settings':eff.provider==='demo'?'Local demo ready':'Local AI configured';
   return createBotTile(b,{primary:b.id===state.bots[0].id,status,statusLabel,surface,onSelect:selected=>navigate(()=>api.selectBot({id:selected.id})),onContextMenu:selected=>openBotMenu(selected.id)});
 }
 function refreshComposer() {
   const root=currentConversation(),waiting=!!root&&(root.pendingComputerHelp||root.computerPause||state.conversations.some(c=>c.parentThreadId===root.id&&(c.pendingComputerHelp||c.computerPause)));
   const busy = !!submitting || (!threadUI?.composing && (isStreaming()||waiting)), hasText = !!$('prompt').value.trim();
+  document.documentElement.dataset.responding=isStreaming()?'1':'0';
   $('send').hidden = !hasText; $('send').setAttribute('aria-label',busy?'Queue message':'Send message'); $('stop').hidden = !busy; $('voice-call').hidden = !!busy || hasText;
   $('send').disabled = !hasText || !!submitting; $('stop').disabled = !!submitting?.cancelled;
   $('chat-model').disabled = !!busy;
@@ -100,10 +114,10 @@ function render(next) {
   $('conversations').replaceChildren(...state.conversations.filter(c => c.botId === bot.id&&!c.parentThreadId&&c.kind!=='group').sort((a,b) => b.createdAt-a.createdAt).map(c => {
     const option = el('option', null, c.title); option.value = c.id; option.selected = c.id === conversation.id; return option;
   }));
-  const local = state.settings.provider === 'local', claude = state.settings.provider === 'claude',codex=state.settings.provider==='codex';
-  $('backend-label').textContent = claude ? `Claude · ${state.settings.model}` : codex?`Codex · ${state.settings.model}`:local ? `Local AI server · ${state.settings.model}` : 'Local demo · scripted responses, no AI model';
-  $('footer-note').textContent = claude ? 'Claude uses your signed-in plan limits. Check important information.' : codex?'Codex uses your ChatGPT plan limits. Check important information.':local ? 'Responses come from your local AI server. Check important information.' : 'Demo mode illustrates the chat workflow. It does not use Grok or generate AI answers.';
-  $('settings-button').title = `Settings · ${claude ? 'Claude' : codex?'Codex':local ? 'local AI server' : 'local demo'}`;
+  const eff = effectiveSettings(state.settings, bot), local = eff.provider === 'local', claude = eff.provider === 'claude',codex=eff.provider==='codex',hostedSpec=HOSTED[eff.provider];
+  $('backend-label').textContent = claude ? `Claude · ${eff.model}` : hostedSpec?`${hostedSpec.title} · ${eff.model}`: codex?`Codex · ${eff.model}`:local ? `Local AI server · ${eff.model}` : 'Local demo · scripted responses, no AI model';
+  $('footer-note').textContent = claude ? 'Claude uses your signed-in plan limits. Check important information.' : hostedSpec?`Replies come from ${hostedSpec.title} using your API key and its usage limits. Check important information.`: codex?'Codex uses your ChatGPT plan limits. Check important information.':local ? 'Responses come from your local AI server. Check important information.' : 'Demo mode illustrates the chat workflow. It does not use Grok or generate AI answers.';
+  $('settings-button').title = `Settings · ${claude ? 'Claude' : hostedSpec?hostedSpec.title:codex?'Codex':local ? 'local AI server' : 'local demo'}`;
   $('chat-model').hidden = !claude&&!codex;
   syncChatModels(bot);
   selects.sync();
@@ -150,7 +164,7 @@ function renderMessages(bot, conversation) {
     const cached=messageViews.get(m.id);if(cached?.signature===signature)return cached.node;
     const item = el('article', `message ${m.role}`); item.dataset.messageId = m.id; item.dataset.status = m.status; item.dataset.kind = m.kind || 'chat';
     const speaker=m.botId?state.bots.find(b=>b.id===m.botId)||bot:bot;const content = el('div', 'message-content'); const provider = m.provider === 'demo' ? ' · local demo' : '';
-    content.append(el('div', 'byline', m.role === 'user' ? (m.sourceScheduleRunId?'Scheduled · '+(m.sourceScheduleTitle||'Task'):'You') : speaker.name + provider));
+    {const byline=el('div', 'byline', m.role === 'user' ? (m.sourceScheduleRunId?'Scheduled · '+(m.sourceScheduleTitle||'Task'):'You') : speaker.name + provider);const logo=providerLogo(m);if(logo)byline.prepend(logo);content.append(byline);}
     if (m.question && Array.isArray(m.question.options)) {
       const question = el('div','question-card');
       question.append(el('h2',null,m.content));
@@ -181,11 +195,11 @@ function renderMessages(bot, conversation) {
     }
     if(m.attachments?.length){const attachments=el('div','attachment-chips');for(const f of m.attachments)attachments.append(el('span','attachment-chip',f.name));content.prepend(attachments);}
     if(m.activities?.some(a=>a.status==='approval'||a.status==='error')){const list=el('div','activity-list');for(const activity of m.activities.filter(a=>a.status==='approval'||a.status==='error')){const row=el('details','tool-activity');row.dataset.status=activity.status;row.dataset.activityId=activity.id;if(expanded.has(activity.id))row.open=true;const label=(activity.name||'Tool').replace(/^mcp__(?:gratis|composio)__/, '').replaceAll('_',' ');row.append(el('summary',null,`${label} · ${activity.status==='approval'?'Needs your approval':activity.status}`));if(activity.input)row.append(el('pre',null,JSON.stringify(activity.input,null,2)));if(activity.detail)row.append(el('p',null,activity.detail));if(activity.status==='approval'){row.open=true;const actions=el('div','approval-actions');for(const [text,allow] of [['Allow',true],['Deny',false]]){const button=el('button',allow?'primary':'quiet-button',text);button.onclick=()=>run(()=>api.respondApproval({id:activity.id,allow}));actions.append(button);}row.append(actions);}list.append(row);}content.append(list);}
-    if (m.role === 'assistant' && m.status === 'complete' && ['claude','codex'].includes(m.provider) && m.usage) content.append(el('div', 'message-usage', `${m.provider==='codex'?'Codex':'Claude'} · ${m.usage.model} · ${m.usage.outputTokens.toLocaleString()} output tokens`));
-    if(m.status==='streaming'){const working=el('div','bot-working');working.setAttribute('role','status');working.setAttribute('aria-label',`${speaker.name} is working`);working.append(makeAvatar(speaker,false,`working-${m.id}`));const label=el('span','sr-only',m.phase==='setup'?'Creating your bot instructions':'Working');working.append(label);content.append(working);}
+    if (m.role === 'assistant' && m.status === 'complete' && (['claude','codex'].includes(m.provider)||isHostedProvider(m.provider)) && m.usage) {const usage=el('div', 'message-usage', `${isHostedProvider(m.provider)?HOSTED[m.provider].label:m.provider==='codex'?'Codex':'Claude'} · ${m.usage.model} · ${m.usage.outputTokens.toLocaleString()} output tokens`);const mark=providerLogo(m);if(mark)usage.prepend(mark);content.append(usage);}
+    if(m.status==='streaming'){const working=el('div','bot-working');working.setAttribute('role','status');working.setAttribute('aria-label',`${speaker.name} is working`);working.append(makeAvatar(speaker,false,`working-${m.id}`));const label=el('span','sr-only',m.phase==='setup'?'Creating your bot instructions':'Working');working.append(label);const workingMark=providerLogo(m);if(workingMark)working.append(workingMark);content.append(working);}
     if (m.status !== 'complete'&&m.status!=='streaming') {
       const status = el('div', 'message-state' + (m.status === 'error' ? ' error' : ''), m.status === 'streaming' ? (m.phase==='setup'?'Creating system prompt from your first message…':'Responding…') : m.error || 'Stopped');
-      content.append(status);
+      {const errorMark=providerLogo(m);if(errorMark)status.prepend(errorMark);}content.append(status);
       const retrySeat=m.sourceConversationId&&state.conversations.find(c=>c.id===m.sourceConversationId),canRetry=conversation.kind!=='group'||(m.kind==='team-reply'?retrySeat&&!retrySeat.inactiveTeamMember:!m.botId||m.botId===conversation.botId);
       if (canRetry&&m.pauseReason!=='computer'&&['error','cancelled'].includes(m.status) && (index === conversation.messages.length - 1||conversation.kind==='group')&&index>conversation.messages.findLastIndex(m=>m.role==='user')) { const retry = el('button', 'retry', 'Retry response'); retry.onclick = () => run(() => api.retry({ conversationId: conversation.id,messageId:m.id })); content.append(retry); }
     }
@@ -249,8 +263,8 @@ $('export-workspace').onclick = () => run(() => api.exportData('workspace'));
 $('share-conversation').onclick = () => run(() => api.exportData('conversation'));
 $('attach-menu').onclick = () => run(()=>api.attachFiles({conversationId:state.activeConversationId}));
 $('chat-model').onchange = async () => {
-  const previous = state.settings.model;
-  const result = await run(() => api.updateBot({id:state.activeBotId,[state.settings.provider==='codex'?'codexModel':'model']:$('chat-model').value}));
+  const eff = effectiveSettings(state.settings, currentBot()), previous = eff.model;
+  const result = await run(() => api.updateBot({id:state.activeBotId,[eff.provider==='codex'?'codexModel':'model']:$('chat-model').value}));
   if (!result) $('chat-model').value = previous;
 };
 let sidebarDrag = null;
@@ -264,16 +278,20 @@ function openBotDialog(edit = true) {
   $('bot-dialog-title').textContent = edit ? 'Edit bot' : 'Create a bot'; $('save-bot').textContent = edit ? 'Save bot' : 'Create bot';
   $('bot-title').value = bot?.name || ''; $('bot-system').value = bot?.instructions || '';
   $('bot-user-template').value = bot?.userPromptTemplate || '{{message}}'; $('bot-user-template').setCustomValidity('');
-  fillModels($('bot-model'),modelsForProvider(),state.settings.provider==='codex'?bot?.codexModel||'':bot?.model||'',true); $('bot-memory').value=bot?.memory||''; for(const key of ['web','files','computer','connections'])$('bot-'+key).checked=bot?.capabilities?.[key]!==false;
+  $('bot-provider').value=bot?.provider||'';syncBotModels(bot); $('bot-memory').value=bot?.memory||''; for(const key of ['web','files','computer','connections'])$('bot-'+key).checked=bot?.capabilities?.[key]!==false;
   $('avatar-controls').hidden = !edit; $('bot-dialog').showModal(); selects.sync(); $('bot-title').focus();
 }
 const createBot = setupCreateBot({api,onCreated:next=>{homeVisible=false;workspaceUI?.hideForHome();render(next);$('messages').scrollTop=$('messages').scrollHeight;$('prompt').focus();}});
 $('new-bot').onclick = async () => {await flushDraft();voiceInput?.cancel();selects.close();createBot.open();}; $('edit-bot').onclick = () => {if(!threadUI?.showDetails())openBotDialog(true);};
-$('bot-form').onsubmit = async e => { e.preventDefault(); const value = { name: $('bot-title').value.trim(), instructions: $('bot-system').value, userPromptTemplate: $('bot-user-template').value, [state.settings.provider==='codex'?'codexModel':'model']:$('bot-model').value, memory:$('bot-memory').value, capabilities:Object.fromEntries(['web','files','computer','connections'].map(key=>[key,$('bot-'+key).checked])) };
+$('bot-form').onsubmit = async e => { e.preventDefault(); const value = { name: $('bot-title').value.trim(), instructions: $('bot-system').value, userPromptTemplate: $('bot-user-template').value, ...botPinFields(), memory:$('bot-memory').value, capabilities:Object.fromEntries(['web','files','computer','connections'].map(key=>[key,$('bot-'+key).checked])) };
   if (value.userPromptTemplate.trim() && !value.userPromptTemplate.includes('{{message}}')) { $('bot-user-template').setCustomValidity('Include {{message}} where your message should go.'); $('bot-user-template').reportValidity(); return; }
   if (editingBot) value.id = editingBot;
   await flushDraft(); const result = await run(() => editingBot ? api.updateBot(value) : api.createBot(value));
-  if (result) { $('bot-dialog').close(); homeVisible = false; updateView(); $('prompt').focus(); }
+  { // createBot ignores provider/model, so a new bot gets its AI in a follow-up update
+    const pins = botPinFields();
+    if (result && !editingBot && (pins.provider || pins.model || pins.codexModel || pins.hostedModel)) await run(() => api.updateBot({ id: result.activeBotId, ...pins }));
+  }
+  if (result) { ensureConnectionChecks(); $('bot-dialog').close(); homeVisible = false; updateView(); $('prompt').focus(); }
 };
 $('create-first-bot').onclick = () => $('new-bot').click();
 let deletingBotId = null, deletionPending = false;
@@ -315,16 +333,20 @@ function openSettings() {
   $('profile-photo-error').hidden = true;
   $('profile-name').value = state.settings.displayName || '';
   $('provider').value = state.settings.provider; $('base-url').value = state.settings.baseUrl; $('model').value = state.settings.model;
+  settingsError(null);$('hosted-key').value='';$('hosted-model').value=isHostedProvider(state.settings.provider)?state.settings.model:'';$('hosted-model').dataset.provider=isHostedProvider(state.settings.provider)?state.settings.provider:'';
   $('claude-model').value = state.settings.provider === 'claude' ? state.settings.model : state.settings.providerDefaults?.claude?.model||'sonnet';
   fillModels($('codex-model'),codexModels,state.settings.provider==='codex'?state.settings.model:state.settings.providerDefaults?.codex?.model);
   $('claude-effort').value = state.settings.provider==='claude'?state.settings.effort||'medium':state.settings.providerDefaults?.claude?.effort||'medium';
   syncCodexEffort(state.settings.provider==='codex'?state.settings.effort:state.settings.providerDefaults?.codex?.effort);
   for(const [key,value] of Object.entries({...DEFAULT_RUN_LIMITS,...state.settings.runLimits}))$('limit-'+key).value=value;
   $('voice-language').value = state.settings.voiceLanguage || 'en';
+  $('memory-provider').value = state.settings.memoryProvider || ''; $('memory-model').value = state.settings.memoryModel || ''; syncMemoryOptions();
   $('claude-model').onchange();
   $('appearance').value = localStorage.getItem('orbit-appearance') || 'system'; $('provider').onchange(); $('settings-dialog').showModal(); selects.sync();
 }
-$('provider').onchange = () => { $('codex-options').hidden=$('provider').value!=='codex';if($('provider').value==='codex')void checkCodexConnection(); $('local-options').hidden = $('provider').value !== 'local'; $('claude-options').hidden = $('provider').value !== 'claude'; $('model').required = $('provider').value === 'local'; if ($('provider').value === 'claude') void checkClaudeConnection(); };
+$('provider').onchange = () => { syncHostedOptions();$('codex-options').hidden=$('provider').value!=='codex';if($('provider').value==='codex')void checkCodexConnection(); $('local-options').hidden = $('provider').value !== 'local'; $('claude-options').hidden = $('provider').value !== 'claude'; $('model').required = $('provider').value === 'local'; if ($('provider').value === 'claude') void checkClaudeConnection(); };
+function syncMemoryOptions(){const provider=$('memory-provider').value,spec=HOSTED[provider];$('memory-model-label').hidden=!provider;const ids=provider==='claude'?['haiku','sonnet','opus']:provider==='codex'?codexModels.map(m=>m.id):spec?spec.suggestions:[];$('memory-model-list').replaceChildren(...ids.map(id=>{const option=document.createElement('option');option.value=id;return option;}));$('memory-model').placeholder=provider==='claude'?'Haiku (default)':'A small, cheap model';}
+$('memory-provider').onchange = () => { $('memory-model').value=''; syncMemoryOptions(); selects.sync(); if($('memory-provider').value==='codex')void checkCodexConnection().then(syncMemoryOptions); };
 $('claude-model').onchange = () => { $('claude-effort').disabled = $('claude-model').value === 'haiku'; selects.sync(); };
 async function checkClaudeConnection() {
   $('claude-status').textContent = 'Checking Claude sign-in…'; $('check-claude').disabled = true;
@@ -333,7 +355,23 @@ async function checkClaudeConnection() {
   finally { $('check-claude').disabled = false; }
 }
 $('check-claude').onclick = checkClaudeConnection;
-function modelsForProvider(){return state.settings.provider==='codex'?codexModels:[{id:'haiku',name:'Haiku'},{id:'sonnet',name:'Sonnet'},{id:'opus',name:'Opus'}];}
+function modelsForProvider(provider=state.settings.provider){return provider==='codex'?codexModels:provider==='claude'?[{id:'haiku',name:'Haiku'},{id:'sonnet',name:'Sonnet'},{id:'opus',name:'Opus'}]:[];}
+// ---- per-bot AI: a supervisor and each sub-agent can be pinned to a different provider ----
+function botFormProvider(){return $('bot-provider').value||state.settings.provider;}
+function syncBotModels(bot){
+  const provider=botFormProvider(),pinned=!!$('bot-provider').value&&provider!==state.settings.provider,spec=HOSTED[provider];
+  $('bot-model-label').hidden=!(provider==='claude'||provider==='codex');$('bot-hosted-label').hidden=!spec;
+  if(provider==='claude'||provider==='codex')fillModels($('bot-model'),modelsForProvider(provider),(provider==='codex'?bot?.codexModel:bot?.model)||'',!pinned);
+  if(spec){$('bot-hosted-model').value=bot?.hostedModel||state.settings.providerDefaults?.[provider]?.model||'';$('bot-hosted-list').replaceChildren(...spec.suggestions.map(id=>{const option=document.createElement('option');option.value=id;return option;}));}
+  selects.sync();
+}
+function botPinFields(){
+  const provider=botFormProvider();
+  return {provider:$('bot-provider').value,...(provider==='codex'?{codexModel:$('bot-model').value}:provider==='claude'?{model:$('bot-model').value}:HOSTED[provider]?{hostedModel:$('bot-hosted-model').value.trim()}:{})};
+}
+$('bot-provider').onchange=()=>{const bot=editingBot?currentBot():null;syncBotModels(bot);if(botFormProvider()==='codex')void checkCodexConnection().then(()=>syncBotModels(bot));};
+// Sign-in status is needed for every provider any bot uses, not only the app default.
+function ensureConnectionChecks(){const used=new Set(state.bots.map(b=>effectiveSettings(state.settings,b).provider));if(used.has('claude'))void checkClaudeConnection();if(used.has('codex'))void checkCodexConnection();}
 function fillModels(select,models,selected,inherit=false){
  const choices=[...(inherit?[{id:'',name:'Use app default'}]:[]),...models];
  if(selected&&!choices.some(m=>m.id===selected))choices.push({id:selected,name:selected});
@@ -341,7 +379,7 @@ function fillModels(select,models,selected,inherit=false){
  const key=JSON.stringify(choices);if(select.dataset.models!==key){select.replaceChildren(...choices.map(m=>{const option=el('option',null,m.name);option.value=m.id;return option;}));select.dataset.models=key;}
  select.value=choices.some(m=>m.id===selected)?selected:(models.find(m=>m.isDefault)?.id||choices[0].id);select.disabled=!models.length&&!inherit;
 }
-function syncChatModels(bot){const codex=state.settings.provider==='codex';fillModels($('chat-model'),modelsForProvider(),(codex?bot.codexModel:bot.model)||state.settings.model);$('chat-model').disabled=isStreaming()||!modelsForProvider().length;}
+function syncChatModels(bot){const eff=effectiveSettings(state.settings,bot),codex=eff.provider==='codex',models=modelsForProvider(eff.provider);fillModels($('chat-model'),models,(codex?bot.codexModel:bot.model)||eff.model);$('chat-model').disabled=isStreaming()||!models.length;}
 function syncCodexEffort(preferred){
  const model=codexModels.find(m=>m.id===$('codex-model').value),efforts=model?.efforts?.length?model.efforts:['low','medium','high'];const selected=preferred||$('codex-effort').value||model?.defaultEffort;
  fillModels($('codex-effort'),efforts.map(id=>({id,name:{xhigh:'Extra high',max:'Maximum',ultra:'Ultra'}[id]||id[0].toUpperCase()+id.slice(1)})),efforts.includes(selected)?selected:model?.defaultEffort||efforts[0]);selects.sync();
@@ -353,9 +391,37 @@ async function checkCodexConnection(){
  codexLoading=(async()=>{try{codexConnection=await api.codexStatus();$('codex-status').textContent=codexConnection.message;if(codexConnection.signedIn){codexModels=await api.codexModels();const selected=$('codex-model').value|| (state.settings.provider==='codex'?state.settings.model:state.settings.providerDefaults?.codex?.model);fillModels($('codex-model'),codexModels,selected);syncCodexEffort();}if(state)render(state);}catch(error){$('codex-status').textContent=error.message||'Could not check Codex. Try again.';}finally{$('check-codex').disabled=false;codexLoading=null;selects.sync();}})();return codexLoading;
 }
 $('check-codex').onclick=checkCodexConnection;
+function syncHostedOptions(){
+  const spec=HOSTED[$('provider').value];$('hosted-options').hidden=!spec;if(!spec)return;
+  const saved=!!hostedKeys[spec.id];
+  $('hosted-key').placeholder=saved?'Key saved. Paste a new one to replace it':'Paste your '+spec.label+' API key';
+  $('hosted-status').textContent=saved?spec.label+' key saved on this computer.':'Your key is stored encrypted on this computer and sent only to '+new URL(spec.baseUrl).host+'.';
+  if($('hosted-model').dataset.provider!==spec.id){$('hosted-model').dataset.provider=spec.id;$('hosted-model').value=state.settings.providerDefaults?.[spec.id]?.model||spec.suggestions[0]||'';}
+  fillHostedModels(spec.suggestions);
+}
+function fillHostedModels(ids){$('hosted-model-list').replaceChildren(...ids.map(id=>{const option=document.createElement('option');option.value=id;return option;}));}
+$('check-hosted').onclick=async()=>{
+  const spec=HOSTED[$('provider').value];if(!spec)return;
+  const button=$('check-hosted'),status=$('hosted-status');button.disabled=true;status.textContent='Checking your '+spec.label+' key…';
+  try{
+    const typed=$('hosted-key').value.trim();
+    const ids=await api.hostedModels(spec.id,typed);
+    fillHostedModels([...new Set([...ids,...spec.suggestions])]);
+    if(!$('hosted-model').value&&ids[0])$('hosted-model').value=ids[0];
+    status.textContent=`Key works. ${ids.length} model${ids.length===1?'':'s'} available. Pick one in the Model box, then save.${typed?' The key is stored when you save.':''}`;
+  }catch(error){status.textContent=error.message||'Could not check the key. Try again.';}
+  finally{button.disabled=false;}
+};
 $('settings-button').onclick = openSettings; $('configure-backend').onclick = openSettings;
-$('settings-form').onsubmit = async e => { e.preventDefault();
-  const result = await run(() => api.updateSettings({ runLimits:Object.fromEntries(Object.keys(DEFAULT_RUN_LIMITS).map(key=>[key,Number($('limit-'+key).value)])),profileAvatarDataUrl: pendingProfileAvatar, displayName: $('profile-name').value.trim(), provider: $('provider').value, baseUrl: $('base-url').value.trim(), model: $('provider').value === 'claude' ? $('claude-model').value : $('provider').value==='codex'?$('codex-model').value:$('model').value.trim(), effort: $('provider').value==='codex'?$('codex-effort').value:$('claude-effort').value, voiceCleanup: true, voiceLanguage: $('voice-language').value }));
+// Settings is a modal, so an error shown in the page behind it would be invisible: show it inside the dialog.
+function settingsError(error){const box=$('settings-error');box.textContent=error?error.message||String(error):'';box.hidden=!error;}
+async function runInSettings(fn){try{const result=await fn();if(result?.bots)render(result);return result;}catch(error){settingsError(error);return null;}}
+$('settings-form').onsubmit = async e => { e.preventDefault();settingsError(null);
+  const hostedSpec=HOSTED[$('provider').value];
+  if(hostedSpec){const typed=$('hosted-key').value.trim();
+    if(typed){if(!await runInSettings(()=>api.configureConnections({[hostedSpec.keyName]:typed})))return;$('hosted-key').value='';await refreshHostedKeys();}
+    else if(!hostedKeys[hostedSpec.id]){settingsError(new Error('Add your '+hostedSpec.label+' API key first.'));return;}}
+  const result = await runInSettings(() => api.updateSettings({ runLimits:Object.fromEntries(Object.keys(DEFAULT_RUN_LIMITS).map(key=>[key,Number($('limit-'+key).value)])),profileAvatarDataUrl: pendingProfileAvatar, displayName: $('profile-name').value.trim(), provider: $('provider').value, baseUrl: $('base-url').value.trim(), model: $('provider').value === 'claude' ? $('claude-model').value : $('provider').value==='codex'?$('codex-model').value:hostedSpec?$('hosted-model').value.trim():$('model').value.trim(), effort: $('provider').value==='codex'?$('codex-effort').value:$('claude-effort').value, voiceCleanup: true, voiceLanguage: $('voice-language').value, memoryProvider: $('memory-provider').value, memoryModel: $('memory-model').value.trim() }));
   if (result) { localStorage.setItem('orbit-appearance', $('appearance').value); applyTheme(await api.systemDark()); $('settings-dialog').close(); }
 };
 function applyTheme(systemDark) { const choice = localStorage.getItem('orbit-appearance') || 'system'; document.documentElement.dataset.theme = choice === 'system' ? (systemDark ? 'dark' : 'light') : choice; if (state) render(state); }
@@ -457,4 +523,4 @@ threadUI=setupThreads({api,getState:()=>state,navigate,avatar:(bot,location='thr
 setupMentions({getState:()=>state});
 setupComposerMenu({api:{...api,attachFiles:async value=>{const conversationId=threadUI.composing?await threadUI.commit():value.conversationId;return api.attachFiles({conversationId});}},getState:()=>state,run,workspace:{...workspaceUI,openSchedules:async()=>{try{if(threadUI.composing)await threadUI.commit();workspaceUI.openSchedules();}catch(error){notice(error);}},openComputer:async options=>{try{if(threadUI.composing)await threadUI.commit();workspaceUI.openComputer(options);}catch(error){notice(error);}}}});
 const edition=await api.edition();$('home-title').textContent=edition.name;document.title=edition.name;document.documentElement.dataset.edition=edition.id;$('app-build').textContent=`${edition.name} ${edition.version} · ${edition.platform} ${edition.arch}`;
-api.onState(render); await run(async () => api.snapshot()); if (state.settings.provider === 'claude') void checkClaudeConnection();if(state.settings.provider==='codex')void checkCodexConnection(); $('prompt').focus();
+api.onState(render); await run(async () => api.snapshot()); await refreshHostedKeys(); ensureConnectionChecks(); $('prompt').focus();

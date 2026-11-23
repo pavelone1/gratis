@@ -21,7 +21,7 @@ npx wrangler secret put GRATIS_TOKEN_SECRET
 npm run deploy
 ```
 
-Read the authentication and enrollment handlers in `src/index.ts` and `src/http.ts` before provisioning desktop credentials. Use a scoped desktop token, not the signing secret. Configure the endpoint and token in Gratis Settings. No account ID, token or production endpoint is supplied here.
+Read the authentication and enrollment handlers in `src/index.ts` and `src/http.ts` before provisioning desktop credentials. Use a scoped desktop token, not the signing secret. Configure the endpoint and token in Gravis Settings. No account ID, token or production endpoint is supplied here.
 
 ## Operate
 

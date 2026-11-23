@@ -26,7 +26,7 @@ test('a pinned bot uses its own provider, model and the remembered effort for th
 });
 
 test('only subscription and API-key providers can be pinned; local and demo follow the app', () => {
-  assert.deepEqual([...BOT_PROVIDERS], ['claude', 'codex', 'xai-api', 'openai-api', 'anthropic-api']);
+  assert.deepEqual([...BOT_PROVIDERS], ['claude', 'codex', 'grok', 'xai-api', 'openai-api', 'anthropic-api']);
   for (const nope of ['local', 'demo', 'nonsense', '', undefined, '__proto__']) assert.equal(isBotProvider(nope), false);
   assert.equal(effectiveSettings({...app, provider: 'local', model: 'llama'}, {provider: 'local'}).provider, 'local');
   assert.equal(effectiveSettings(app, {provider: 'demo'}).provider, 'claude'); // an unknown pin is ignored, not obeyed

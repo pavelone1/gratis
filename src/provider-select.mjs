@@ -7,11 +7,11 @@ import { HOSTED_MODEL_PATTERN, isHostedProvider } from './hosted-providers.mjs';
 
 // Providers a single bot can be pinned to. 'local' and 'demo' always follow the app-wide setting
 // because they depend on the app-wide server address.
-export const BOT_PROVIDERS = Object.freeze(['claude', 'codex', 'xai-api', 'openai-api', 'anthropic-api']);
+export const BOT_PROVIDERS = Object.freeze(['claude', 'codex', 'grok', 'xai-api', 'openai-api', 'anthropic-api']);
 export const isBotProvider = provider => typeof provider === 'string' && BOT_PROVIDERS.includes(provider);
 
 // Each provider keeps its own per-bot model field (the original two predate this module).
-export const botModelField = provider => provider === 'claude' ? 'model' : provider === 'codex' ? 'codexModel' : isHostedProvider(provider) ? 'hostedModel' : null;
+export const botModelField = provider => provider === 'claude' ? 'model' : provider === 'codex' ? 'codexModel' : (provider === 'grok' || isHostedProvider(provider)) ? 'hostedModel' : null;
 
 /** The settings a run for `bot` should use: the bot's own provider/model when pinned, else the app default. */
 export function effectiveSettings(settings, bot = {}) {
@@ -30,9 +30,9 @@ export function validateMemoryChoice(provider = '', model = '') {
   if (provider && !isBotProvider(provider)) throw new Error('Choose Claude, Codex or an API-key provider for memory updates, or follow the app default.');
   if (!provider) return { memoryProvider: '', memoryModel: '' };
   if (model.length > 200) throw new Error('Memory model name is too long.');
-  if (!model && provider !== 'claude') throw new Error('Enter a model for memory updates. A small, cheap one is plenty.');
+  if (!model && provider !== 'claude' && provider !== 'grok') throw new Error('Enter a model for memory updates. A small, cheap one is plenty.');
   if (model && provider === 'claude' && !['sonnet', 'haiku', 'opus'].includes(model)) throw new Error('Choose a Claude memory model: Sonnet, Haiku, or Opus.');
   if (model && provider === 'codex' && !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$/.test(model)) throw new Error('Choose a Codex memory model from your account.');
-  if (model && isHostedProvider(provider) && !HOSTED_MODEL_PATTERN.test(model)) throw new Error('Enter a valid model ID for memory updates.');
+  if (model && (provider === 'grok' || isHostedProvider(provider)) && !HOSTED_MODEL_PATTERN.test(model)) throw new Error('Enter a valid model ID for memory updates.');
   return { memoryProvider: provider, memoryModel: model };
 }

@@ -6,7 +6,7 @@ Every bot can run on its own AI. That lets a **supervisor** (the primary bot of 
 
 1. Open a bot's **Edit bot** dialog and choose **AI for this bot**:
    - **Use app default** follows Settings (the default for every bot).
-   - **Claude subscription** and **Codex · ChatGPT subscription** use your signed-in plan, with no API billing.
+   - **Claude subscription**, **Codex · ChatGPT subscription** and **Grok subscription (Grok Build)** use your signed-in plan, with no API billing.
    - **xAI Grok / OpenAI / Claude · API key** use a key you saved in Settings (see [API-key providers](API_KEY_PROVIDERS.md)).
 2. Pick that AI's model for the bot. For a subscription provider the list comes from your sign-in; for an API-key provider type a model ID.
 3. Repeat for each bot, then create a group with them. The primary bot is the supervisor; teammates are the sub-agents. Mention one with `@name`, or `@everyone` for all.
@@ -15,11 +15,11 @@ Each reply records which AI wrote it, and the bot's tile shows whether *its* AI 
 
 ## What each kind of AI can do
 
-| | Claude / Codex subscription | API-key providers (xAI, OpenAI, Claude API) |
-| --- | --- | --- |
-| Billing | your plan's usage limits | pay-as-you-go with that vendor, set up by you |
-| Delegate to teammates (`ask_agent`) | yes | no, but they can be asked and can answer |
-| Own computer, files, schedules, memory tools | yes | no (plain chat) |
+| | Claude / Codex subscription | Grok subscription | API-key providers (xAI, OpenAI, Claude API) |
+| --- | --- | --- | --- |
+| Billing | your plan's usage limits | your Grok plan's usage limits | pay-as-you-go with that vendor, set up by you |
+| Delegate to teammates (`ask_agent`) | yes | no, but they can be asked and can answer | no, but they can be asked and can answer |
+| Own computer, files, schedules, memory tools | yes | no (plain chat) | no (plain chat) |
 
 A supervisor that needs to delegate or use a computer should therefore be on a **subscription** provider. An API-key bot works well as a specialist that answers when asked.
 
@@ -29,7 +29,12 @@ Every bot gets its own isolated cloud computer (it is keyed to the bot), separat
 
 ## About Grok
 
-Grok currently works here **only through an xAI API key**, which is billed separately from a Grok or SuperGrok subscription. Some third-party tools advertise signing in with a SuperGrok subscription instead; Gravis does not support that yet because it has not been checked against xAI's own documentation and terms.
+There are two ways to use Grok:
+
+- **Grok subscription (Grok Build)** uses your Grok plan. Gravis runs xAI's own `grok` program, which keeps its own sign-in, so Gravis never sees your Grok login and no API key is involved. Install it from [x.ai/build](https://x.ai/build), run `grok login` once in a terminal, then choose **Grok subscription** in Settings or **Edit bot** and use **Check Grok connection** to load your models. Each reply is one headless run of `grok` in an empty temporary folder with tools, memory, sub-agents and web search switched off, so a Grok bot is plain chat. If it asks for a tool, Gravis stops it and says so.
+- **xAI Grok · API key** uses an xAI API key, billed separately from a Grok subscription (see [API-key providers](API_KEY_PROVIDERS.md)).
+
+The `grok` program adds a large built-in prompt, so each reply uses roughly 13,000 input tokens even for a short question. That is counted against your Grok plan, so it is better suited to a few strong answers than to many small background calls. The memory AI setting works with Grok but is a poor fit for that reason.
 
 ## Keeping usage down
 

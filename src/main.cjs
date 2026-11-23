@@ -216,6 +216,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('orbit:remove-attachment', async(e,{conversationId,path:attachment})=>{authorized(e);const c=service._conversation(conversationId);c.draftAttachments=(c.draftAttachments||[]).filter(f=>f.path!==attachment);return service._changed();});
   ipcMain.handle('orbit:export-file', async(e,{botId,path:relative})=>{authorized(e);service._bot(botId);const source=await files.target(botId,relative);const result=await dialog.showSaveDialog(window,{defaultPath:path.basename(source)});if(!result.canceled&&result.filePath)await fs.copyFile(source,result.filePath);});
   ipcMain.handle('orbit:codex-status', async e=>{authorized(e);return (await import('./codex-client.mjs')).getCodexStatus();});
+  ipcMain.handle('orbit:grok-status', async e=>{authorized(e);return (await import('./grok-client.mjs')).getGrokStatus();});
   ipcMain.handle('orbit:codex-models', async e=>{authorized(e);return (await import('./codex-client.mjs')).getCodexModels();});
   ipcMain.handle('orbit:claude-status', async e => { authorized(e); const { getClaudeStatus } = await import('./claude-backend.mjs'); return getClaudeStatus(); });
   ipcMain.handle('orbit:microphone-permission', async e => {

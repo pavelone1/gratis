@@ -13,7 +13,7 @@ export function initialState() {
 }
 export function validState(s) {
   try{if(s?.settings?.runLimits!==undefined)validateRunLimits(s.settings.runLimits);}catch{return false;}
-  if (!s || s.version !== 1 || !Array.isArray(s.bots) || !Array.isArray(s.conversations) || !s.settings || !(['demo', 'local', 'claude', 'codex'].includes(s.settings.provider) || isHostedProvider(s.settings.provider)) || typeof s.settings.baseUrl !== 'string' || typeof s.settings.model !== 'string') return false;
+  if (!s || s.version !== 1 || !Array.isArray(s.bots) || !Array.isArray(s.conversations) || !s.settings || !(['demo', 'local', 'claude', 'codex', 'grok'].includes(s.settings.provider) || isHostedProvider(s.settings.provider)) || typeof s.settings.baseUrl !== 'string' || typeof s.settings.model !== 'string') return false;
   if (s.settings.profileAvatarDataUrl !== undefined && s.settings.profileAvatarDataUrl !== null && (typeof s.settings.profileAvatarDataUrl !== 'string' || s.settings.profileAvatarDataUrl.length > 2_000_000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(s.settings.profileAvatarDataUrl))) return false;
   if (s.settings.displayName !== undefined && (typeof s.settings.displayName !== 'string' || s.settings.displayName.length > 80)) return false;
   if (s.settings.effort !== undefined && !['minimal','low', 'medium', 'high','xhigh','max','ultra','persistent'].includes(s.settings.effort)) return false;

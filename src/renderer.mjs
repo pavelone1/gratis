@@ -29,12 +29,12 @@ let homeVisible = true, submitting = null;
 let dateView = null;
 const sidebarViews = new Map();
 const messageViews=new Map();
-let claudeConnection = null, codexConnection=null, codexModels=[],codexLoading=null;
+let claudeConnection = null, codexConnection=null, codexModels=[],codexLoading=null,grokConnection=null,grokModels=[],grokLoading=null;
 let pendingProfileAvatar = null, profilePhotoSequence = 0, avatarTarget = null;
 let avatarSource = null, avatarImage = null, avatarCrop = null, imageSequence = 0, pointer = null;
 const el = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
 function notice(error) { $('notice').textContent = error?.message || String(error); $('notice').hidden = false; }
-const LOGO_BY_PROVIDER={claude:'claude',codex:'openai'};
+const LOGO_BY_PROVIDER={claude:'claude',codex:'openai',grok:'xai'};
 // Small animated provider mark for assistant bylines. Nodes are rebuilt while streaming, so the
 // time-based negative delay keeps the motion in phase instead of restarting on every chunk.
 function providerLogo(m){
@@ -59,10 +59,10 @@ function makeAvatar(bot,user=false,location='sidebar') {
 function isStreaming() { return currentConversation()?.messages.some(m => m.status === 'streaming'); }
 function renderBotTile(b,surface='tile') {
   const messages=state.conversations.filter(c=>c.botId===b.id).flatMap(c=>c.messages),busy=messages.some(m=>m.status==='streaming');
-  const eff=effectiveSettings(state.settings,b),isClaude=eff.provider==='claude',isCodex=eff.provider==='codex',hosted=HOSTED[eff.provider];
-  const unconfigured=(eff.provider==='local'&&!eff.model)||(isClaude&&!claudeConnection?.signedIn)||(isCodex&&!codexConnection?.signedIn)||(hosted&&!hostedKeys[hosted.id]);
+  const eff=effectiveSettings(state.settings,b),isClaude=eff.provider==='claude',isCodex=eff.provider==='codex',isGrok=eff.provider==='grok',hosted=HOSTED[eff.provider];
+  const unconfigured=(eff.provider==='local'&&!eff.model)||(isClaude&&!claudeConnection?.signedIn)||(isCodex&&!codexConnection?.signedIn)||(isGrok&&!grokConnection?.signedIn)||(hosted&&!hostedKeys[hosted.id]);
   const status=busy?'busy':unconfigured?'unconfigured':'ready';
-  const statusLabel=busy?'Responding':isClaude?(claudeConnection?.signedIn?'Claude ready':'Check Claude sign-in in Settings'):isCodex?(codexConnection?.signedIn?'Codex ready':'Check Codex sign-in in Settings'):hosted?(hostedKeys[hosted.id]?hosted.label+' ready':'Add your '+hosted.label+' key in Settings'):unconfigured?'Choose a local model in Settings':eff.provider==='demo'?'Local demo ready':'Local AI configured';
+  const statusLabel=busy?'Responding':isClaude?(claudeConnection?.signedIn?'Claude ready':'Check Claude sign-in in Settings'):isCodex?(codexConnection?.signedIn?'Codex ready':'Check Codex sign-in in Settings'):isGrok?(grokConnection?.signedIn?'Grok ready':'Check Grok sign-in in Settings'):hosted?(hostedKeys[hosted.id]?hosted.label+' ready':'Add your '+hosted.label+' key in Settings'):unconfigured?'Choose a local model in Settings':eff.provider==='demo'?'Local demo ready':'Local AI configured';
   return createBotTile(b,{primary:b.id===state.bots[0].id,status,statusLabel,surface,onSelect:selected=>navigate(()=>api.selectBot({id:selected.id})),onContextMenu:selected=>openBotMenu(selected.id)});
 }
 function refreshComposer() {
@@ -114,10 +114,10 @@ function render(next) {
   $('conversations').replaceChildren(...state.conversations.filter(c => c.botId === bot.id&&!c.parentThreadId&&c.kind!=='group').sort((a,b) => b.createdAt-a.createdAt).map(c => {
     const option = el('option', null, c.title); option.value = c.id; option.selected = c.id === conversation.id; return option;
   }));
-  const eff = effectiveSettings(state.settings, bot), local = eff.provider === 'local', claude = eff.provider === 'claude',codex=eff.provider==='codex',hostedSpec=HOSTED[eff.provider];
-  $('backend-label').textContent = claude ? `Claude · ${eff.model}` : hostedSpec?`${hostedSpec.title} · ${eff.model}`: codex?`Codex · ${eff.model}`:local ? `Local AI server · ${eff.model}` : 'Local demo · scripted responses, no AI model';
-  $('footer-note').textContent = claude ? 'Claude uses your signed-in plan limits. Check important information.' : hostedSpec?`Replies come from ${hostedSpec.title} using your API key and its usage limits. Check important information.`: codex?'Codex uses your ChatGPT plan limits. Check important information.':local ? 'Responses come from your local AI server. Check important information.' : 'Demo mode illustrates the chat workflow. It does not use Grok or generate AI answers.';
-  $('settings-button').title = `Settings · ${claude ? 'Claude' : hostedSpec?hostedSpec.title:codex?'Codex':local ? 'local AI server' : 'local demo'}`;
+  const eff = effectiveSettings(state.settings, bot), local = eff.provider === 'local', claude = eff.provider === 'claude',codex=eff.provider==='codex',grok=eff.provider==='grok',hostedSpec=HOSTED[eff.provider];
+  $('backend-label').textContent = claude ? `Claude · ${eff.model}` : hostedSpec?`${hostedSpec.title} · ${eff.model}`: codex?`Codex · ${eff.model}`:grok?`Grok · ${eff.model||'default model'}`:local ? `Local AI server · ${eff.model}` : 'Local demo · scripted responses, no AI model';
+  $('footer-note').textContent = claude ? 'Claude uses your signed-in plan limits. Check important information.' : hostedSpec?`Replies come from ${hostedSpec.title} using your API key and its usage limits. Check important information.`: codex?'Codex uses your ChatGPT plan limits. Check important information.':grok?'Grok uses your Grok subscription through Grok Build. Chat only, no tools. Check important information.':local ? 'Responses come from your local AI server. Check important information.' : 'Demo mode illustrates the chat workflow. It does not use Grok or generate AI answers.';
+  $('settings-button').title = `Settings · ${claude ? 'Claude' : hostedSpec?hostedSpec.title:codex?'Codex':grok?'Grok':local ? 'local AI server' : 'local demo'}`;
   $('chat-model').hidden = !claude&&!codex;
   syncChatModels(bot);
   selects.sync();
@@ -195,7 +195,7 @@ function renderMessages(bot, conversation) {
     }
     if(m.attachments?.length){const attachments=el('div','attachment-chips');for(const f of m.attachments)attachments.append(el('span','attachment-chip',f.name));content.prepend(attachments);}
     if(m.activities?.some(a=>a.status==='approval'||a.status==='error')){const list=el('div','activity-list');for(const activity of m.activities.filter(a=>a.status==='approval'||a.status==='error')){const row=el('details','tool-activity');row.dataset.status=activity.status;row.dataset.activityId=activity.id;if(expanded.has(activity.id))row.open=true;const label=(activity.name||'Tool').replace(/^mcp__(?:gratis|composio)__/, '').replaceAll('_',' ');row.append(el('summary',null,`${label} · ${activity.status==='approval'?'Needs your approval':activity.status}`));if(activity.input)row.append(el('pre',null,JSON.stringify(activity.input,null,2)));if(activity.detail)row.append(el('p',null,activity.detail));if(activity.status==='approval'){row.open=true;const actions=el('div','approval-actions');for(const [text,allow] of [['Allow',true],['Deny',false]]){const button=el('button',allow?'primary':'quiet-button',text);button.onclick=()=>run(()=>api.respondApproval({id:activity.id,allow}));actions.append(button);}row.append(actions);}list.append(row);}content.append(list);}
-    if (m.role === 'assistant' && m.status === 'complete' && (['claude','codex'].includes(m.provider)||isHostedProvider(m.provider)) && m.usage) {const usage=el('div', 'message-usage', `${isHostedProvider(m.provider)?HOSTED[m.provider].label:m.provider==='codex'?'Codex':'Claude'} · ${m.usage.model} · ${m.usage.outputTokens.toLocaleString()} output tokens`);const mark=providerLogo(m);if(mark)usage.prepend(mark);content.append(usage);}
+    if (m.role === 'assistant' && m.status === 'complete' && (['claude','codex','grok'].includes(m.provider)||isHostedProvider(m.provider)) && m.usage) {const usage=el('div', 'message-usage', `${isHostedProvider(m.provider)?HOSTED[m.provider].label:m.provider==='codex'?'Codex':m.provider==='grok'?'Grok':'Claude'} · ${m.usage.model} · ${m.usage.outputTokens.toLocaleString()} output tokens`);const mark=providerLogo(m);if(mark)usage.prepend(mark);content.append(usage);}
     if(m.status==='streaming'){const working=el('div','bot-working');working.setAttribute('role','status');working.setAttribute('aria-label',`${speaker.name} is working`);working.append(makeAvatar(speaker,false,`working-${m.id}`));const label=el('span','sr-only',m.phase==='setup'?'Creating your bot instructions':'Working');working.append(label);const workingMark=providerLogo(m);if(workingMark)working.append(workingMark);content.append(working);}
     if (m.status !== 'complete'&&m.status!=='streaming') {
       const status = el('div', 'message-state' + (m.status === 'error' ? ' error' : ''), m.status === 'streaming' ? (m.phase==='setup'?'Creating system prompt from your first message…':'Responding…') : m.error || 'Stopped');
@@ -341,12 +341,13 @@ function openSettings() {
   for(const [key,value] of Object.entries({...DEFAULT_RUN_LIMITS,...state.settings.runLimits}))$('limit-'+key).value=value;
   $('voice-language').value = state.settings.voiceLanguage || 'en';
   $('memory-provider').value = state.settings.memoryProvider || ''; $('memory-model').value = state.settings.memoryModel || ''; syncMemoryOptions();
+  $('grok-model').value=state.settings.provider==='grok'?state.settings.model:state.settings.providerDefaults?.grok?.model||'';
   $('claude-model').onchange();
   $('appearance').value = localStorage.getItem('orbit-appearance') || 'system'; $('provider').onchange(); $('settings-dialog').showModal(); selects.sync();
 }
-$('provider').onchange = () => { syncHostedOptions();$('codex-options').hidden=$('provider').value!=='codex';if($('provider').value==='codex')void checkCodexConnection(); $('local-options').hidden = $('provider').value !== 'local'; $('claude-options').hidden = $('provider').value !== 'claude'; $('model').required = $('provider').value === 'local'; if ($('provider').value === 'claude') void checkClaudeConnection(); };
-function syncMemoryOptions(){const provider=$('memory-provider').value,spec=HOSTED[provider];$('memory-model-label').hidden=!provider;const ids=provider==='claude'?['haiku','sonnet','opus']:provider==='codex'?codexModels.map(m=>m.id):spec?spec.suggestions:[];$('memory-model-list').replaceChildren(...ids.map(id=>{const option=document.createElement('option');option.value=id;return option;}));$('memory-model').placeholder=provider==='claude'?'Haiku (default)':'A small, cheap model';}
-$('memory-provider').onchange = () => { $('memory-model').value=''; syncMemoryOptions(); selects.sync(); if($('memory-provider').value==='codex')void checkCodexConnection().then(syncMemoryOptions); };
+$('provider').onchange = () => { syncHostedOptions();$('grok-options').hidden=$('provider').value!=='grok';if($('provider').value==='grok')void checkGrokConnection();$('codex-options').hidden=$('provider').value!=='codex';if($('provider').value==='codex')void checkCodexConnection(); $('local-options').hidden = $('provider').value !== 'local'; $('claude-options').hidden = $('provider').value !== 'claude'; $('model').required = $('provider').value === 'local'; if ($('provider').value === 'claude') void checkClaudeConnection(); };
+function syncMemoryOptions(){const provider=$('memory-provider').value,spec=HOSTED[provider];$('memory-model-label').hidden=!provider;const ids=provider==='claude'?['haiku','sonnet','opus']:provider==='codex'?codexModels.map(m=>m.id):provider==='grok'?grokModels.map(m=>m.id):spec?spec.suggestions:[];$('memory-model-list').replaceChildren(...ids.map(id=>{const option=document.createElement('option');option.value=id;return option;}));$('memory-model').placeholder=provider==='claude'?'Haiku (default)':provider==='grok'?'Default model':'A small, cheap model';}
+$('memory-provider').onchange = () => { $('memory-model').value=''; syncMemoryOptions(); selects.sync(); if($('memory-provider').value==='codex')void checkCodexConnection().then(syncMemoryOptions); if($('memory-provider').value==='grok')void checkGrokConnection().then(syncMemoryOptions); };
 $('claude-model').onchange = () => { $('claude-effort').disabled = $('claude-model').value === 'haiku'; selects.sync(); };
 async function checkClaudeConnection() {
   $('claude-status').textContent = 'Checking Claude sign-in…'; $('check-claude').disabled = true;
@@ -359,19 +360,20 @@ function modelsForProvider(provider=state.settings.provider){return provider==='
 // ---- per-bot AI: a supervisor and each sub-agent can be pinned to a different provider ----
 function botFormProvider(){return $('bot-provider').value||state.settings.provider;}
 function syncBotModels(bot){
-  const provider=botFormProvider(),pinned=!!$('bot-provider').value&&provider!==state.settings.provider,spec=HOSTED[provider];
+  const provider=botFormProvider(),pinned=!!$('bot-provider').value&&provider!==state.settings.provider,spec=HOSTED[provider]||(provider==='grok'?{suggestions:grokModels.map(m=>m.id),optional:true}:null);
   $('bot-model-label').hidden=!(provider==='claude'||provider==='codex');$('bot-hosted-label').hidden=!spec;
+  const chatOnly=provider==='grok'||!!HOSTED[provider];$('bot-caps-label').hidden=$('bot-caps').hidden=chatOnly;$('bot-caps-note').hidden=!chatOnly;
   if(provider==='claude'||provider==='codex')fillModels($('bot-model'),modelsForProvider(provider),(provider==='codex'?bot?.codexModel:bot?.model)||'',!pinned);
-  if(spec){$('bot-hosted-model').value=bot?.hostedModel||state.settings.providerDefaults?.[provider]?.model||'';$('bot-hosted-list').replaceChildren(...spec.suggestions.map(id=>{const option=document.createElement('option');option.value=id;return option;}));}
+  if(spec){$('bot-hosted-model').placeholder=spec.optional?'Default model':'Model ID from your provider';$('bot-hosted-model').value=bot?.hostedModel||state.settings.providerDefaults?.[provider]?.model||'';$('bot-hosted-list').replaceChildren(...spec.suggestions.map(id=>{const option=document.createElement('option');option.value=id;return option;}));}
   selects.sync();
 }
 function botPinFields(){
   const provider=botFormProvider();
-  return {provider:$('bot-provider').value,...(provider==='codex'?{codexModel:$('bot-model').value}:provider==='claude'?{model:$('bot-model').value}:HOSTED[provider]?{hostedModel:$('bot-hosted-model').value.trim()}:{})};
+  return {provider:$('bot-provider').value,...(provider==='codex'?{codexModel:$('bot-model').value}:provider==='claude'?{model:$('bot-model').value}:HOSTED[provider]||provider==='grok'?{hostedModel:$('bot-hosted-model').value.trim()}:{})};
 }
-$('bot-provider').onchange=()=>{const bot=editingBot?currentBot():null;syncBotModels(bot);if(botFormProvider()==='codex')void checkCodexConnection().then(()=>syncBotModels(bot));};
+$('bot-provider').onchange=()=>{const bot=editingBot?currentBot():null;syncBotModels(bot);if(botFormProvider()==='codex')void checkCodexConnection().then(()=>syncBotModels(bot));if(botFormProvider()==='grok')void checkGrokConnection().then(()=>syncBotModels(bot));};
 // Sign-in status is needed for every provider any bot uses, not only the app default.
-function ensureConnectionChecks(){const used=new Set(state.bots.map(b=>effectiveSettings(state.settings,b).provider));if(used.has('claude'))void checkClaudeConnection();if(used.has('codex'))void checkCodexConnection();}
+function ensureConnectionChecks(){const used=new Set(state.bots.map(b=>effectiveSettings(state.settings,b).provider));if(used.has('claude'))void checkClaudeConnection();if(used.has('codex'))void checkCodexConnection();if(used.has('grok'))void checkGrokConnection();}
 function fillModels(select,models,selected,inherit=false){
  const choices=[...(inherit?[{id:'',name:'Use app default'}]:[]),...models];
  if(selected&&!choices.some(m=>m.id===selected))choices.push({id:selected,name:selected});
@@ -385,6 +387,14 @@ function syncCodexEffort(preferred){
  fillModels($('codex-effort'),efforts.map(id=>({id,name:{xhigh:'Extra high',max:'Maximum',ultra:'Ultra'}[id]||id[0].toUpperCase()+id.slice(1)})),efforts.includes(selected)?selected:model?.defaultEffort||efforts[0]);selects.sync();
 }
 $('codex-model').onchange=()=>syncCodexEffort();
+async function checkGrokConnection(){
+ if(grokLoading)return grokLoading;
+ $('grok-status').textContent='Checking your Grok sign-in…';$('check-grok').disabled=true;
+ grokLoading=(async()=>{try{grokConnection=await api.grokStatus();$('grok-status').textContent=grokConnection.message;grokModels=grokConnection.signedIn?grokConnection.models:[];
+  $('grok-model-list').replaceChildren(...grokModels.map(m=>{const o=document.createElement('option');o.value=m.id;return o;}));if(grokConnection.defaultModel)$('grok-model').placeholder='Default: '+grokConnection.defaultModel;if(state)render(state);}
+  catch(error){$('grok-status').textContent=error.message||'Could not check Grok.';}finally{$('check-grok').disabled=false;grokLoading=null;}})();return grokLoading;
+}
+$('check-grok').onclick=()=>{void checkGrokConnection();};
 async function checkCodexConnection(){
  if(codexLoading)return codexLoading;
  $('codex-status').textContent='Checking ChatGPT sign-in…';$('check-codex').disabled=true;
@@ -421,7 +431,7 @@ $('settings-form').onsubmit = async e => { e.preventDefault();settingsError(null
   if(hostedSpec){const typed=$('hosted-key').value.trim();
     if(typed){if(!await runInSettings(()=>api.configureConnections({[hostedSpec.keyName]:typed})))return;$('hosted-key').value='';await refreshHostedKeys();}
     else if(!hostedKeys[hostedSpec.id]){settingsError(new Error('Add your '+hostedSpec.label+' API key first.'));return;}}
-  const result = await runInSettings(() => api.updateSettings({ runLimits:Object.fromEntries(Object.keys(DEFAULT_RUN_LIMITS).map(key=>[key,Number($('limit-'+key).value)])),profileAvatarDataUrl: pendingProfileAvatar, displayName: $('profile-name').value.trim(), provider: $('provider').value, baseUrl: $('base-url').value.trim(), model: $('provider').value === 'claude' ? $('claude-model').value : $('provider').value==='codex'?$('codex-model').value:hostedSpec?$('hosted-model').value.trim():$('model').value.trim(), effort: $('provider').value==='codex'?$('codex-effort').value:$('claude-effort').value, voiceCleanup: true, voiceLanguage: $('voice-language').value, memoryProvider: $('memory-provider').value, memoryModel: $('memory-model').value.trim() }));
+  const result = await runInSettings(() => api.updateSettings({ runLimits:Object.fromEntries(Object.keys(DEFAULT_RUN_LIMITS).map(key=>[key,Number($('limit-'+key).value)])),profileAvatarDataUrl: pendingProfileAvatar, displayName: $('profile-name').value.trim(), provider: $('provider').value, baseUrl: $('base-url').value.trim(), model: $('provider').value === 'claude' ? $('claude-model').value : $('provider').value==='codex'?$('codex-model').value:$('provider').value==='grok'?$('grok-model').value.trim():hostedSpec?$('hosted-model').value.trim():$('model').value.trim(), effort: $('provider').value==='codex'?$('codex-effort').value:$('claude-effort').value, voiceCleanup: true, voiceLanguage: $('voice-language').value, memoryProvider: $('memory-provider').value, memoryModel: $('memory-model').value.trim() }));
   if (result) { localStorage.setItem('orbit-appearance', $('appearance').value); applyTheme(await api.systemDark()); $('settings-dialog').close(); }
 };
 function applyTheme(systemDark) { const choice = localStorage.getItem('orbit-appearance') || 'system'; document.documentElement.dataset.theme = choice === 'system' ? (systemDark ? 'dark' : 'light') : choice; if (state) render(state); }

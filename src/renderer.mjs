@@ -2,6 +2,7 @@ import {setupMessaging} from './messaging-ui.mjs';
 import {DEFAULT_RUN_LIMITS} from './run-limits.mjs';
 import {reconcileChildren} from './ui-dom.mjs';
 import {setupMentions} from './mentions-ui.mjs';
+import {createPromptHistory,promptsForConversation,onFirstLine,onLastLine} from './prompt-history.mjs';
 import {sidebarItems} from './sidebar-items.mjs';
 import {setupThreads} from './threads-ui.mjs';
 import {setupComposerMenu} from './composer-menu.mjs';
@@ -233,10 +234,32 @@ async function flushDraft() {
   dirtyDraft = null; await run(() => api.setDraft(pending));
 }
 async function navigate(fn) { if(workspaceUI&&await workspaceUI.beforeNavigate()===false)return;threadUI?.cancel();voiceInput?.cancel(); selects.close(); await flushDraft(); const result = await run(fn); if (!result) return; homeVisible = false; updateView(); $('messages').scrollTop = $('messages').scrollHeight; $('prompt').focus(); }
-$('prompt').addEventListener('input', draftChanged);
+$('prompt').addEventListener('input', () => { promptHistory.reset(); draftChanged(); });
+// Up / Down in the message box walk through your earlier prompts, like a terminal. Up only acts when the
+// caret is on the first line and Down on the last, so editing a long prompt still moves around normally.
+const promptHistory = createPromptHistory();
+function showHistoryText(text, caretAtStart) {
+  const box = $('prompt'); box.value = text; const at = caretAtStart ? 0 : text.length; box.setSelectionRange(at, at); draftChanged();
+}
+$('prompt').addEventListener('keydown', e => {
+  if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
+  if (document.getElementById('mention-menu')?.matches(':popover-open')) return;
+  const box = $('prompt');
+  if (box.selectionStart !== box.selectionEnd) return;
+  if (e.key === 'ArrowUp') {
+    if (!onFirstLine(box.value, box.selectionStart) || !state?.activeConversationId) return;
+    const key = state.activeConversationId, text = promptHistory.previous(box.value, () => promptsForConversation(state, key), key);
+    e.preventDefault();
+    if (text !== null) showHistoryText(text, true);
+  } else if (promptHistory.browsing && onLastLine(box.value, box.selectionStart)) {
+    e.preventDefault();
+    const text = promptHistory.next();
+    if (text !== null) showHistoryText(text, false);
+  }
+});
 $('prompt').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('composer').requestSubmit(); } });
 async function submitMessage(value=$('prompt').value) {
-  const input=value.trim();if(!input||voiceInput?.active||submitting)return;
+  const input=value.trim();if(!input||voiceInput?.active||submitting)return;promptHistory.reset();
   const job={conversationId:state.activeConversationId,cancelled:false};submitting=job;
   const original=value;clearTimeout(draftTimer);dirtyDraft=null;$('prompt').value='';$('notice').hidden=true;refreshComposer();
   try{

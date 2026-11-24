@@ -3,6 +3,7 @@
 The root MIT license covers the project's own source and original interface artwork. It does not replace dependency licenses or grant rights in other organizations' trademarks.
 
 - **Interface badges and line icons:** original SVG definitions maintained in this repository. No bundled commercial font files, extracted avatar meshes or external animation recordings are included.
+- **Windows icon (`assets/gravis.ico`, `assets/gravis-icon.png`):** drawn by `scripts/make-windows-icon.ps1` in this fork from basic shapes; it uses no external artwork.
 - **App icon:** an AI-generated illustration commissioned for this project. Its source PNG and macOS icon are included. It is separate from provider identity marks.
 - **Provider identity icons:** Simple Icons SVGs under CC0, used solely to identify Claude and OpenAI connections. See `src/assets/provider-logos.md`. The marks themselves belong to their owners.
 - **T3 installer helper:** MIT-licensed upstream helper; its required notice is in `src/assets/T3-LICENSE.txt`. The helper is retained as source for development; this edition does not install a system T3 service through the UI.

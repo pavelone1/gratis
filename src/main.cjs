@@ -6,6 +6,8 @@ const { pathToFileURL } = require('node:url');
 
 const edition=require('../edition.json');
 app.setName(edition.name);
+// Windows: a stable app id so the taskbar shows the window's own icon and groups its windows correctly.
+if(process.platform==='win32')app.setAppUserModelId(edition.bundleId);
 const dataOverride = process.env.GRATIS_DATA_DIR;
 const dataDir = dataOverride || (app.isPackaged
   ? path.join(app.getPath('appData'), edition.dataFolder, 'data') : path.resolve(__dirname, '../data'));
@@ -103,6 +105,7 @@ app.whenReady().then(async () => {
   }
   if(secureStorageAccess.locked)throw new Error('Secure storage is locked.');
   window = new BrowserWindow({ width: 1496, height: 938, minWidth: 512, minHeight: 520, show: false,
+    ...(process.platform==='win32'?{icon:path.join(__dirname,'..','assets','gravis.ico')}:{}),
     title: edition.name, backgroundColor: '#121212', titleBarStyle: 'hiddenInset', trafficLightPosition: { x:16,y:15 },
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true, nodeIntegration: false, sandbox: true } });

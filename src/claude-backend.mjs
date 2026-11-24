@@ -1,8 +1,10 @@
 import {validateRunLimits} from './run-limits.mjs';
 import {withMemoryContext} from './memory-context.mjs';
 import {compactValue,traceValue} from './computer-checkpoint.mjs';
-import { access, mkdir } from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { launchEnvironment, findProgram } from './launch-env.mjs';
+import { findBundledClaude } from './claude-locate.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
@@ -12,12 +14,15 @@ import { createHash } from 'node:crypto';
 const exec = promisify(execFile);
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
-export function claudeEnvironment(source = process.env) {
-  const env = {};
-  for (const key of ['HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'CLAUDE_CONFIG_DIR', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_EXTRA_CA_CERTS'])
-    if (source[key]) env[key] = source[key];
-  env.HOME ||= homedir();
-  env.PATH = [join(env.HOME, '.local/bin'), '/opt/homebrew/bin', '/usr/local/bin', source.PATH, '/usr/bin', '/bin'].filter(Boolean).join(':');
+const GIT_BASH_DEFAULTS = ['C:\\Program Files\\Git\\bin\\bash.exe', 'C:\\Program Files (x86)\\Git\\bin\\bash.exe'];
+export function claudeEnvironment(source = process.env, { platform = process.platform, home = homedir() } = {}) {
+  const env = launchEnvironment(source, {
+    platform, home,
+    unixKeys: ['HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'CLAUDE_CONFIG_DIR', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_EXTRA_CA_CERTS'],
+    windowsKeys: ['LANG', 'CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_GIT_BASH_PATH', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_EXTRA_CA_CERTS'],
+  });
+  // Claude Code on Windows wants Git Bash; point it at the usual install if the user has not said where.
+  if (platform === 'win32' && !env.CLAUDE_CODE_GIT_BASH_PATH) { const bash = GIT_BASH_DEFAULTS.find(file => existsSync(file)); if (bash) env.CLAUDE_CODE_GIT_BASH_PATH = bash; }
   env.CLAUDE_AGENT_SDK_CLIENT_APP = 'gratis-desktop';
   env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
   env.API_TIMEOUT_MS = '120000';
@@ -27,25 +32,36 @@ export function claudeEnvironment(source = process.env) {
   return env;
 }
 
-export async function findClaudeExecutable(env = claudeEnvironment()) {
-  const candidates = [...new Set(env.PATH.split(':').filter(isAbsolute).map(dir => join(dir, 'claude')))];
-  for (const candidate of candidates) {
-    try { await access(candidate, constants.X_OK); return candidate; } catch {}
+export async function findClaudeExecutable(env = claudeEnvironment(), { platform = process.platform, check, bundled = findBundledClaude } = {}) {
+  const onPath = await findProgram('claude', env, { platform, ...(check ? { check } : {}) });
+  if (onPath) return onPath;
+  // On Windows the Claude desktop app carries its own copy of Claude Code; use it if nothing else is installed.
+  if (platform === 'win32') {
+    const [copy] = await bundled([env.LOCALAPPDATA && `${env.LOCALAPPDATA}\\Claude-Data`, env.APPDATA && `${env.APPDATA}\\Claude`, env.LOCALAPPDATA && `${env.LOCALAPPDATA}\\AnthropicClaude`]);
+    if (copy) return copy;
   }
-  throw new Error('Claude Code was not found. Install Claude Code, sign in, then check the connection in Settings.');
+  throw new Error(platform === 'win32'
+    ? 'Claude Code was not found. Install it from claude.ai/install, sign in with "claude auth login", then check the connection in Settings.'
+    : 'Claude Code was not found. Install Claude Code, sign in, then check the connection in Settings.');
 }
 
-export async function getClaudeStatus() {
-  let installed = false;
+export async function getClaudeStatus({ run = exec, find = findClaudeExecutable, platform = process.platform, environment = claudeEnvironment } = {}) {
+  let installed = false, executable;
+  const loginHelp = () => platform === 'win32'
+    ? `In PowerShell run: & "${executable}" auth login — then check again.`
+    : 'Run “claude auth login” in Terminal, then check again.';
   try {
-    const env = claudeEnvironment(), executable = await findClaudeExecutable(env);
+    const env = environment();
+    executable = await find(env);
     installed = true;
-    const { stdout } = await exec(executable, ['auth', 'status', '--json'], { env, timeout: 15000, maxBuffer: 256_000 });
+    let stdout;
+    // The program exits non-zero when nobody is signed in, but still prints the answer as JSON.
+    try { ({ stdout } = await run(executable, ['auth', 'status', '--json'], { env, timeout: 15000, maxBuffer: 256_000, windowsHide: true })); } catch (error) { if (typeof error.stdout === 'string' && error.stdout.trim().startsWith('{')) stdout = error.stdout; else throw error; }
     const state = JSON.parse(stdout);
     const signedIn = state.loggedIn === true && state.authMethod === 'claude.ai';
-    return { installed: true, signedIn, message: signedIn ? 'Claude is signed in. Uses your Claude plan limits.' : 'Sign in to Claude Code with your Claude account, then check again.' };
+    return { installed: true, signedIn, message: signedIn ? 'Claude is signed in. Uses your Claude plan limits.' : `Claude Code is installed but not signed in to your Claude account. ${loginHelp()}` };
   } catch (error) {
-    return { installed, signedIn: false, message: error.message?.startsWith('Claude Code was not found') ? error.message : 'Could not confirm your Claude login. Run “claude auth login” in Terminal, then check again.' };
+    return { installed, signedIn: false, message: error.message?.startsWith('Claude Code was not found') ? error.message : `Could not confirm your Claude login. ${loginHelp()}` };
   }
 }
 

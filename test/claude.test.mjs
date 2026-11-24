@@ -21,7 +21,7 @@ async function* success(text = 'Hello') {
 }
 
 test('Claude environment retains login location but drops API billing credentials and unrelated secrets', () => {
-  const env = claudeEnvironment({ HOME: '/test', PATH: '/usr/bin', ANTHROPIC_API_KEY: 'secret', CLAUDE_CODE_OAUTH_TOKEN: 'secret', GITHUB_TOKEN: 'secret', CLAUDECODE: '1' });
+  const env = claudeEnvironment({ HOME: '/test', PATH: '/usr/bin', ANTHROPIC_API_KEY: 'secret', CLAUDE_CODE_OAUTH_TOKEN: 'secret', GITHUB_TOKEN: 'secret', CLAUDECODE: '1' }, { platform: 'linux' });
   assert.equal(env.HOME, '/test');
   for (const key of ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'GITHUB_TOKEN', 'CLAUDECODE']) assert.equal(env[key], undefined);
 });

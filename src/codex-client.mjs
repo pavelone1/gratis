@@ -3,20 +3,29 @@ import {createInterface} from 'node:readline';
 import {promisify} from 'node:util';
 import {access,mkdir,writeFile} from 'node:fs/promises';
 import {constants} from 'node:fs';
-import {join,isAbsolute} from 'node:path';
+import {join} from 'node:path';
 import {homedir} from 'node:os';
+import {launchEnvironment,findProgram} from './launch-env.mjs';
 const exec=promisify(execFile);
-export function codexEnvironment(source=process.env){
-  const env={};for(const key of ['HOME','USER','LOGNAME','SHELL','TMPDIR','LANG','LC_ALL','LC_CTYPE','CODEX_HOME','SSL_CERT_FILE','SSL_CERT_DIR','NODE_EXTRA_CA_CERTS'])if(source[key])env[key]=source[key];
-  env.HOME||=homedir();env.PATH=[join(env.HOME,'.local/bin'),'/opt/homebrew/bin','/usr/local/bin',source.PATH,'/usr/bin','/bin'].filter(Boolean).join(':');return env;
+export function codexEnvironment(source=process.env,{platform=process.platform,home=homedir()}={}){
+  return launchEnvironment(source,{platform,home,
+    unixKeys:['HOME','USER','LOGNAME','SHELL','TMPDIR','LANG','LC_ALL','LC_CTYPE','CODEX_HOME','SSL_CERT_FILE','SSL_CERT_DIR','NODE_EXTRA_CA_CERTS'],
+    windowsKeys:['LANG','CODEX_HOME','SSL_CERT_FILE','SSL_CERT_DIR','NODE_EXTRA_CA_CERTS']});
 }
-export async function findCodexExecutable(env=codexEnvironment()){
-  for(const candidate of [...new Set(env.PATH.split(':').filter(isAbsolute).map(dir=>join(dir,'codex')))])try{await access(candidate,constants.X_OK);return candidate;}catch{}
+export async function findCodexExecutable(env=codexEnvironment(),{platform=process.platform,check}={}){
+  // The Codex desktop app on Windows keeps its program here rather than on PATH.
+  const extraFolders=platform==='win32'&&env.LOCALAPPDATA?[join(env.LOCALAPPDATA,'Programs','OpenAI','Codex','bin')]:[];
+  const found=await findProgram('codex',env,{platform,extraFolders,...(check?{check}:{})});
+  if(found)return found;
   throw new Error('Install Codex, run “codex login” in Terminal, then check the connection again.');
 }
+// macOS and Linux start Codex through a small shell script that adds the isolation flags. Windows cannot,
+// so there the backend runs Codex directly (see codex-direct-exec.mjs).
+export const codexNeedsDirectRun=(platform=process.platform)=>platform==='win32';
 // An app-owned launcher keeps SDK runs independent of personal config, MCPs,
 // hooks and rules, while authentication stays with the installed Codex client.
-export async function codexLauncher(directory,executable,{ephemeral=false}={}){
+export async function codexLauncher(directory,executable,{ephemeral=false,platform=process.platform}={}){
+  if(codexNeedsDirectRun(platform))return executable;
   await mkdir(directory,{recursive:true,mode:0o700});const file=join(directory,'codex-launcher');
   const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
   await writeFile(file,`#!/bin/sh\nif [ "$1" = exec ]; then\n  shift\n  exec ${quote(executable)} exec --ignore-user-config --ignore-rules${ephemeral?' --ephemeral':''} "$@"\nfi\nexec ${quote(executable)} "$@"\n`,{mode:0o700});return file;
@@ -25,7 +34,7 @@ export async function getCodexStatus(){
   let installed=false;
   try{
     const env=codexEnvironment(),executable=await findCodexExecutable(env);installed=true;
-    const {stdout,stderr}=await exec(executable,['login','status'],{env,timeout:15000,maxBuffer:64000});
+    const {stdout,stderr}=await exec(executable,['login','status'],{env,timeout:15000,maxBuffer:64000,windowsHide:true});
     const signedIn=/logged in using chatgpt/i.test(stdout+'\n'+stderr);
     return {installed,signedIn,message:signedIn?'Connected to your ChatGPT subscription. Codex plan limits apply.':'Run “codex login” in Terminal and sign in with ChatGPT, then check again.'};
   }catch(error){return {installed,signedIn:false,message:installed?'Run “codex login” in Terminal, then check again.':error.message};}
@@ -33,7 +42,7 @@ export async function getCodexStatus(){
 export async function getCodexModels(){
   const env=codexEnvironment(),executable=await findCodexExecutable(env);
   return new Promise((resolve,reject)=>{
-    const child=spawn(executable,['app-server','--listen','stdio://','-c','model_provider="openai"'],{env,stdio:['pipe','pipe','pipe']});
+    const child=spawn(executable,['app-server','--listen','stdio://','-c','model_provider="openai"'],{env,stdio:['pipe','pipe','pipe'],windowsHide:true});
     const lines=createInterface({input:child.stdout});let settled=false;let models=[],cursor=null;
     const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);lines.close();child.stdin.end();child.kill();error?reject(error):resolve(value);};
     const timer=setTimeout(()=>finish(new Error('Codex model list timed out. Check your connection and try again.')),25000);

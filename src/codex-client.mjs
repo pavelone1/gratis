@@ -8,9 +8,11 @@ import {homedir} from 'node:os';
 import {launchEnvironment,findProgram} from './launch-env.mjs';
 const exec=promisify(execFile);
 export function codexEnvironment(source=process.env,{platform=process.platform,home=homedir()}={}){
-  return launchEnvironment(source,{platform,home,
-    unixKeys:['HOME','USER','LOGNAME','SHELL','TMPDIR','LANG','LC_ALL','LC_CTYPE','CODEX_HOME','SSL_CERT_FILE','SSL_CERT_DIR','NODE_EXTRA_CA_CERTS'],
-    windowsKeys:['LANG','CODEX_HOME','SSL_CERT_FILE','SSL_CERT_DIR','NODE_EXTRA_CA_CERTS']});
+  // Codex's own one-line error records (not its other logging) are what let a stalled run say why.
+  const env=launchEnvironment(source,{platform,home,
+    unixKeys:['HOME','USER','LOGNAME','SHELL','TMPDIR','LANG','LC_ALL','LC_CTYPE','CODEX_HOME','SSL_CERT_FILE','SSL_CERT_DIR','NODE_EXTRA_CA_CERTS','RUST_LOG'],
+    windowsKeys:['LANG','CODEX_HOME','SSL_CERT_FILE','SSL_CERT_DIR','NODE_EXTRA_CA_CERTS','RUST_LOG']});
+  env.RUST_LOG||='codex_otel.trace_safe=info';return env;
 }
 export async function findCodexExecutable(env=codexEnvironment(),{platform=process.platform,check}={}){
   // The Codex desktop app on Windows keeps its program here rather than on PATH.

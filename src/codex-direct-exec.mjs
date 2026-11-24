@@ -70,6 +70,7 @@ export function buildCodexExecArgs(args, { config, ephemeral = false } = {}) {
 export class DirectCodexExec {
   constructor({ executablePath, env, config, ephemeral = false, spawnImpl = spawn }) {
     this.executablePath = executablePath; this.env = env; this.config = config; this.ephemeral = ephemeral; this.spawnImpl = spawnImpl;
+    this.lastStderr = ''; // what Codex last wrote to its error stream, kept so a stalled run can say why
   }
 
   async *run(args) {
@@ -86,7 +87,9 @@ export class DirectCodexExec {
     child.stdin.end();
     if (!child.stdout) { child.kill(); throw new Error('Child process has no stdout'); }
     const stderr = [];
-    child.stderr?.on('data', data => stderr.push(data));
+    this.lastStderr = '';
+    let kept = 0;
+    child.stderr?.on('data', data => { if (kept < 65536) { stderr.push(data); kept += data.length; } this.lastStderr = (this.lastStderr + data).slice(-4000); });
     const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
     try {

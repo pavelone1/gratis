@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createCodexReply, codexStallMs} from '../src/codex-backend.mjs';
+import {createCodexReply, codexStallMs, tidyCodexStderr} from '../src/codex-backend.mjs';
 
 const ID = '01234567-89ab-cdef-0123-456789abcdef';
 const settings = {provider: 'codex', model: 'm', effort: 'medium'};
@@ -11,6 +11,7 @@ const bot = {name: 'T', instructions: 'Be brief.'};
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // A fake Codex whose runs are described one per attempt: 'hang', 'ok', or a function returning an event generator.
+let fakeStderr = '';
 function fakeClient(plans, calls) {
   const run = async (prompt, {signal}) => {
     const plan = plans[Math.min(calls.length, plans.length - 1)];
@@ -24,7 +25,7 @@ function fakeClient(plans, calls) {
       yield {type: 'turn.completed', usage: {input_tokens: 1, output_tokens: 1}};
     })()};
   };
-  return {startThread: () => ({id: ID, runStreamed: run}), resumeThread: () => ({id: ID, runStreamed: run})};
+  return {exec: {get lastStderr() { return fakeStderr; }}, startThread: () => ({id: ID, runStreamed: run}), resumeThread: () => ({id: ID, runStreamed: run})};
 }
 
 async function reply(t, plans, extra = {}) {
@@ -95,4 +96,51 @@ test('thinking-heavy settings wait longer before a reply counts as stalled', () 
   assert.ok(codexStallMs('medium') >= 120000);
   assert.ok(codexStallMs('xhigh') > codexStallMs('medium'));
   assert.equal(codexStallMs(undefined), codexStallMs('low'));
+});
+
+test('"Reconnecting" notices are Codex retrying, not a failure; the run carries on and can still succeed', async t => {
+  const retrying = async function* () {
+    yield {type: 'error', message: 'Reconnecting... 1/5 (Selected model is at capacity. Please try a different model.)'};
+    yield {type: 'error', message: 'Reconnecting... 2/5 (Selected model is at capacity. Please try a different model.)'};
+    yield {type: 'item.completed', item: {id: 'a', type: 'agent_message', text: 'Made it'}};
+    yield {type: 'turn.completed', usage: {}};
+  };
+  const {run, calls} = await reply(t, [retrying]);
+  assert.equal(await run(), 'Made it');
+  assert.equal(calls.length, 1);
+});
+
+test('when the model stays at capacity the user is told so plainly, with what to do', async t => {
+  const final = async function* () { yield {type: 'error', message: 'Selected model is at capacity. Please try a different model.'}; };
+  const {run} = await reply(t, [final]);
+  await assert.rejects(run(), /OpenAI says this model is at capacity right now.*another Codex model/);
+});
+
+test('a stall after a retry notice says what Codex last reported', async t => {
+  const quiet = async function* () {
+    yield {type: 'error', message: 'Reconnecting... 3/5 (connection reset by peer)'};
+    await wait(400);
+  };
+  const {run} = await reply(t, [quiet]);
+  await assert.rejects(run(), /stopped responding for.*Codex said: Reconnecting\.\.\. 3\/5 \(connection reset by peer\)/);
+});
+
+test('a silent stall whose log shows 429 Too Many Requests is explained as OpenAI being at capacity', async t => {
+  fakeStderr = '2026-11-24T02:41:06.126Z  INFO codex_otel.trace_safe: event.name="codex.sse_event" event.kind=response.completed error.message=exceeded retry limit, last status: 429 Too Many Requests event.timestamp=2026-11-24T02:41:06.126Z conversation.id=x';
+  t.after(() => { fakeStderr = ''; });
+  const {run} = await reply(t, ['hang', 'hang']);
+  await assert.rejects(run(), /OpenAI says this model is at capacity right now.*another Codex model/);
+});
+
+test('Codex\'s own error line is reduced to its reason', () => {
+  const log = '2026-11-24T02:41:06Z  INFO codex_otel.trace_safe: event.name="codex.sse_event" event.kind=response.completed error.message=exceeded retry limit, last status: 429 Too Many Requests event.timestamp=2026-11-24T02:41:06.126Z conversation.id=abc\n2026-11-24T02:41:07Z  INFO codex_otel.trace_safe: event.name="codex.startup_phase" startup.status="ready"';
+  assert.equal(tidyCodexStderr(log), 'exceeded retry limit, last status: 429 Too Many Requests');
+  assert.equal(tidyCodexStderr('2026-11-24T02:44:24Z  INFO codex_otel.trace_safe: event.name="codex.startup_phase"'), '', 'routine log lines are not shown as a reason');
+});
+
+test('tidied Codex error text drops colours, keys and the prompt banner', () => {
+  assert.equal(tidyCodexStderr('\u001b[31mReading prompt from stdin...\u001b[0m\nstream error sk-abc123 oops\nretrying 2/5\n'), 'stream error [redacted] oops / retrying 2/5');
+  assert.equal(tidyCodexStderr(''), '');
+  assert.equal(tidyCodexStderr(undefined), '');
+  assert.ok(tidyCodexStderr('x'.repeat(1000)).length <= 240);
 });
